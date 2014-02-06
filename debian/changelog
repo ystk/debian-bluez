@@ -1,44 +1,274 @@
-bluez (4.66-3) testing; urgency=medium
+bluez (4.99-2) unstable; urgency=low
 
-  * Drop patches/010_udev_rules_agent.patch (Closes: #588034).
+  * Update debian/control.
+    - Drop obsolete python-gobject dependency. (Closes: #663744)
+      python-gi is used instead.
+    - Change module-init-tools dependency to kmod. (Closes: #663359)
+  * Fix FTBFS with -std=c99 option. (Closes: #661879)
+    Add patches/09_fix_ftbfs_with_c99.patch
+  * Update debian/README.Debian. (Closes: #663955)
+    Add more infomation about alsa.conf.
+  * Update bluez.postint. (Closes: #663066)
+    Remove udev reload and makedev from postinst.
+
+ -- Nobuhiro Iwamatsu <iwamatsu@debian.org>  Fri, 23 Mar 2012 17:51:50 +0900
+
+bluez (4.99-1) unstable; urgency=low
+
+  * New upstream release.
+  * Update debian/control.
+    - Update Standards-Version to 3.9.3.
+    - Use architecture wild-card linux-any. (Closes: #662095)
+    - Update version of cdbs to >= 0.4.97.
+  * Remove some patches. Applied to version 4.99.
+    - 09_fix_compile_with_C++.patch
+    - 10-audio-Fix-disabling-local-A2DP-endpoints-when-UNIX-s.patch
+
+ -- Nobuhiro Iwamatsu <iwamatsu@debian.org>  Thu, 08 Mar 2012 08:01:05 +0900
+
+bluez (4.98-3) unstable; urgency=low
+
+  * Fix A2DP not working on default. (Closes: #659897, #657255)
+    Add patches/10-audio-Fix-disabling-local-A2DP-endpoints-when-UNIX-s.patch.
+
+ -- Nobuhiro Iwamatsu <iwamatsu@debian.org>  Sat, 25 Feb 2012 16:49:54 +0900
+
+bluez (4.98-2) unstable; urgency=low
+
+  * Provides proximity.conf by bluez. (Closes: #656889)
+    Update debian/bluez.install. proximity.conf was installed to
+    etc/bluetooth/proximity.conf.
+
+ -- Nobuhiro Iwamatsu <iwamatsu@debian.org>  Wed, 01 Feb 2012 05:24:00 +0900
+
+bluez (4.98-1) unstable; urgency=low
+
+  * New upstream release.
+  * Update debian/bluetooth-dbus.conf.
+  * Update debian/control.
+    Add Multi-Arch: foreign to bluez.
+
+ -- Nobuhiro Iwamatsu <iwamatsu@debian.org>  Tue, 24 Jan 2012 05:35:09 +0900
+
+bluez (4.97-1) experimental; urgency=low
+
+  * New upstream release.
+  * Update debian/contorl.
+    - Add check (>= 0.9.8-1.1) to Build-Depends.
+  * Update debian/rules.
+    - Remove --enable-attrib, --enable-udevrules and --enable-configfiles 
+      from configure.
+    - Add --enable-time, --enable-alert and --enable-gatt-example to
+      configure.
+  * Update bluez-cups.install.
+    Fix cups backend into multiarch path. (Closes: #645884)
+  * Update man for l2test. (Closes: #649432)
+  * Update debian/patches/06-alsalib.patch
+
+ -- Nobuhiro Iwamatsu <iwamatsu@debian.org>  Tue, 27 Dec 2011 17:19:00 +0900
+
+bluez (4.96-3) unstable; urgency=low
+
+  * Install debian/bluez-udev to /lib/udev/bluez-udev.
+    (Closes #639356, #643829)
+
+ -- Nobuhiro Iwamatsu <iwamatsu@debian.org>  Fri, 30 Sep 2011 12:35:45 +0900
+
+bluez (4.96-2) unstable; urgency=low
+
+  * Add support static library of libbluetooth-dev. (Closes: #558742)
+    Don't include static library in bluez-alsa and bluez-gstreamer.
+  * Fix bluez udev rules attempt to access /usr when /usr may not be mounted.
+    Thanks to anomie@users.sourceforge.net. (Closes: #639356)
+  * Fix typo in debian/bluez.preinst. (Closes: #643321)
+    Thanks to Trent W. Buck.
+  * Remove dh-autoreconf and add '-Wl,--as-needed' to LDFLAGS.
+
+ -- Nobuhiro Iwamatsu <iwamatsu@debian.org>  Sun, 28 Sep 2011 01:50:05 +0900
+
+bluez (4.96-1) unstable; urgency=low
+
+  * New upstream release.
+    Applied some patch from Daniel Schaal. Thanks! (Closes: #636633)
+  * Add debug packages.
+    bluez-dbg and libbluetooth3-dbg.
+  * Add support systemd.
+  * Update debian/control.
+    - Add s390x to Architecture. (Closes: #636545)
+    - Add libreadline-dev to Build-Depends.
+  * Drop patchsys-quilt.mk snippet: superfluous with source
+    format 3.0 "(quilt)".
+  * Refresh patch.
+  * Switch to multiarch.
+  * Update debian/rules.
+    - Remove obsolete configure flags.
+    - Add new plugins (proximity, sap, wiimote, thermometer, dbusoob).
+    - Strip and move to .install files.
+    - Add LDFLAGS=-Wl,--as-needed to configure option.
+  * Add usr/bin/gatttool into bluez package.
+  * Update bluez.lintian-overrides.
+  * Update debian/copyright.
+    Update path of license file.
+
+ -- Nobuhiro Iwamatsu <iwamatsu@debian.org>  Thu, 04 Aug 2011 11:46:35 +0900
+
+bluez (4.94-3) unstable; urgency=low
+
+  * Add dh-autoreconf to Build-Depends. To support dh-autoreconf,
+    update debian/control and debian/rules.
+  * Update version and the install path for which libasound depended.
+    Add patch/06-alsalib.patch. Thanks for Steve Langasek and Jordi Mallach.
+    (Closes: #634976).
+  * Remove Andrea Veri from Uploaders.
+    Thank you for having maintained this package. (Closes: #635095)
+
+ -- Nobuhiro Iwamatsu <iwamatsu@debian.org>  Sun, 24 Jul 2011 18:31:59 +0900
+
+bluez (4.94-2) unstable; urgency=medium
+
+  * Add udev to Replaces and Breaks field (Closes: #628904).
+  * Fix typo from deamon to daemon (Closes: 629901).
+
+ -- Nobuhiro Iwamatsu <iwamatsu@debian.org>  Thu, 09 Jun 2011 21:48:21 +0900
+
+bluez (4.94-1) unstable; urgency=medium
+
+  * New upstream release.
+  * Update debian/control.
+    - Add ppc64 to Architecture.
+    - Add version depency of udev (Closes: #628904, #628765).
+  * Remove debian/patches/03_fix_udevdir.patch.
+    Applied to upstream.
+  * Update debian/bluez.bluetooth.init.
+    Applied patch from Cristian Ionescu-Idbohrn (Closes: #628491).
+  * Update debian/bluez.postinst.
+    Add abort-upgrade, abort-remove and abort-deconfigure target
+    to bluez.postinst.
+  * Fix return code of hid2hci.
+    Add patch 03-Fix-return-code-of-hid2hci.patch
+  * Fix work Logitech keyboard (Closes: #626975)
+    Add patch 04-Fix-bluetooth-hid2hci.rules.patch
+
+ -- Nobuhiro Iwamatsu <iwamatsu@debian.org>  Wed, 01 Jun 2011 15:30:01 +0900
+
+bluez (4.93-3) unstable; urgency=low
+
+  * Fix install hid2hci to /lib/udev. 
+
+ -- Nobuhiro Iwamatsu <iwamatsu@debian.org>  Tue, 31 May 2011 19:42:33 +0900
+
+bluez (4.93-2) unstable; urgency=low
+
+  * Update debian/README.Debian.gz.
+    Add description of bluez-simple-agent (Closes: #488306, #384680).
+  * Update debian/bluez_agent.udev and debian/bluez.bluetooth.init.
+    Fix path of hid2hci (Closes: #628491).
+  * Add debian/patches/03_fix_udevdir.patch.
+
+ -- Nobuhiro Iwamatsu <iwamatsu@debian.org>  Tue, 31 May 2011 18:04:29 +0900
+
+bluez (4.93-1) unstable; urgency=low
+
+  * New upstream release.
+  * Update debian/control.
+    - Add libudev-dev to Build-Depends.
+  * Update debian/bluetooth-dbus.conf.
+    Add policy for lp group.
+
+ -- Nobuhiro Iwamatsu <iwamatsu@debian.org>  Fri, 20 May 2011 10:31:07 +0900
+
+bluez (4.91-1) unstable; urgency=low
+
+  * New upstream release.
+  * Updte debian/control
+    + Update to S-V 3.9.2: no changes needed.
+    + Remove libdbus-1-dev from Build-Depends.
+      This is interpolated by libdbus-1-dev.
+  * Update debian/libbluetooth3.symbols.
+
+ -- Nobuhiro Iwamatsu <iwamatsu@debian.org>  Tue, 12 Apr 2011 11:50:49 +0900
+
+bluez (4.89-1) unstable; urgency=low
+
+  * New upstream release.
+
+ -- Nobuhiro Iwamatsu <iwamatsu@debian.org>  Sat, 05 Mar 2011 17:08:40 +0900
+
+bluez (4.87-2) unstable; urgency=low
+
+  * Upload to unstable.
+
+ -- Nobuhiro Iwamatsu <iwamatsu@debian.org>  Wed, 09 Feb 2011 01:38:45 +0900
+
+bluez (4.87-1) experimental; urgency=low
+
+  * New upstream release.
+
+ -- Nobuhiro Iwamatsu <iwamatsu@debian.org>  Wed, 26 Jan 2011 07:58:27 +0900
+
+bluez (4.86-1) experimental; urgency=low
+
+  * New upstream release.
+  * Update debian/rules.
+    - Enable health plugin and attrib plugin.
+
+ -- Nobuhiro Iwamatsu <iwamatsu@debian.org>  Mon, 24 Jan 2011 11:49:55 +0900
+
+bluez (4.84-1) experimental; urgency=low
+
+  * New upstream release.
+  * Update README.Debian.
+    - Update section of Keyboard and mouse support
+      (Closes: #599894, #535929).
+
+ -- Nobuhiro Iwamatsu <iwamatsu@debian.org>  Wed, 12 Jan 2011 17:23:25 +0900
+
+bluez (4.82-1) experimental; urgency=low
+
+  * New upstream release.
+  * Add manpages of bluetooth-agent.
+
+ -- Nobuhiro Iwamatsu <iwamatsu@debian.org>  Mon, 20 Dec 2010 01:39:43 +0900
+
+bluez (4.81-1) experimental; urgency=low
+
+  * New upstream release.
+  * Drop patches/010_udev_rules_agent.patch (Closes: ##588034).
     Connection of bluetooth is cut off after system start,
     if applied this patch. And this patch is not already necessary.
+  * Disabled HAL (Closes: 599023).
+    Add patches/02_disable_hal.patch
+  * Update debian/rules
+    - Provide again bluetooth-agent utility (Closes: #598982).
+    - Remove --enable-netlink option of configure.
+      This option was not provided.
+  * Update debian/bluez.install
+    Remove path of plugins.
+  * Update libbluetooth-dev.install
+    Remove path of plugins.
 
- -- Nobuhiro Iwamatsu <iwamatsu@debian.org>  Thu, 02 Dec 2010 12:14:56 +0900
+ -- Nobuhiro Iwamatsu <iwamatsu@debian.org>  Thu, 02 Dec 2010 12:17:48 +0900
 
-bluez (4.66-2) testing; urgency=low
+bluez (4.70-1) unstable; urgency=low
 
-  * Fix init script to be a nop when the package is removed.
-    debian/bluez.bluetooth.init (Closes: #593172).
-  * Fix removal of obsolete conffile.
-    debian/bluez.preinst (Closes: #592982, #568301).
-  * Backports some pathces from upstream (Closes: #601583).
-    - 0204_Fix-memory-leak.patch
-      Fix memory leak in hfp_ag_record function.
-    - 0206_Fix-missing-error-check-to-dbus_message_get_args.patch
-      Fix missing error check to dbus_message_get_args.
-    - 0207_Fix-attempt-to-use-a-potential-negative-array-index.patch
-      Fix attempt to use a potential negative array index.
-    - 0208_Fix-sdp_get_supp_feat-function.patch
-	  Fix data allocation size to get in sdp_get_supp_feat. 
-    - 0209_Fix-unblock-removed-device.patch
-	  Fix unblock removed device.
-    - 0213_Fix-not-freeing-memory-on-driver-exit.patch
-      Fix not freeing memory on driver exit.
-    - 0214_Fix-possible-memory-leaks-on-ofono-driver.patch
-	  Fix memory leak by add address check.
-    - 0215_Fix-not-cancelling-authentication-when-bonding-fails.patch
-	  Fix not cancelling authentication when bonding fails
-    - 0217_Fix-sending-authentication-reply-when-bonding-is-alr.patch
-	  When bonding is already completed, sending authentication reply.
-    - 0218_Fix-use-of-errno-after-calling-some-function-that-co.patch
-	  Fix return erro code in device_authentication_requested function.
-    - 0227_core-fix-emitting-pairable-when-there-could-still-oc.patch
-	  Move error check code.
-    - 0229_Fix-the-return-value-of-read_device_alias.patch
-	  Fix the return value of read_device_alias function.
+  * New upstream release.
+  * Update debian/bluez.bluetooth.init (Closes: #593172).
+  * Update debian/bluez.preinst (Closes: #592982, #568301).
+  * Update debian/control.
+    - python-gobject and python-dbus move from Suggests to Depends.
+  * Replase bluetooth-agent to bluez-simple-agent.
+  * Some test program move to usr/bin.
+ 
+ -- Nobuhiro Iwamatsu <iwamatsu@debian.org>  Fri, 03 Sep 2010 08:43:02 +0900
 
- -- Nobuhiro Iwamatsu <iwamatsu@debian.org>  Thu, 04 Nov 2010 05:45:03 +0900
+bluez (4.69-1) unstable; urgency=low
+
+  * New upstream release (Closes: #589727).
+  * Update debian/control.
+    - bumped standards-version to 3.9.1.
+  * Update libbluetooth3.symbols.
+
+ -- Nobuhiro Iwamatsu <iwamatsu@debian.org>  Wed, 28 Jul 2010 13:44:34 +0900
 
 bluez (4.66-1) unstable; urgency=low
 

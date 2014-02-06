@@ -1,5 +1,4 @@
-debian/tmp/usr/include/*
-debian/tmp/usr/lib/lib*.so
-debian/tmp/usr/lib/*.la
-debian/tmp/usr/lib/pkgconfig/*
-debian/tmp/usr/lib/bluetooth/plugins/*.la
+usr/include/bluetooth
+usr/lib/*/libbluetooth.a
+usr/lib/*/libbluetooth.so
+usr/lib/*/pkgconfig

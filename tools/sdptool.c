@@ -226,6 +226,11 @@ static struct attrib_def audio_attrib_names[] = {
 	{ 0x302, "Remote audio volume control", NULL, 0 },
 };
 
+/* Name of the various GOEP attributes. See BT assigned numbers */
+static struct attrib_def goep_attrib_names[] = {
+	{ 0x200, "GoepL2capPsm", NULL, 0 },
+};
+
 /* Same for the UUIDs. See BT assigned numbers */
 static struct uuid_def uuid16_names[] = {
 	/* -- Protocols -- */
@@ -261,8 +266,10 @@ static struct uuid_def uuid16_names[] = {
 	{ 0x1102, "LANAccessUsingPPP", NULL, 0 },
 	{ 0x1103, "DialupNetworking (DUN)", NULL, 0 },
 	{ 0x1104, "IrMCSync", NULL, 0 },
-	{ 0x1105, "OBEXObjectPush", NULL, 0 },
-	{ 0x1106, "OBEXFileTransfer", NULL, 0 },
+	{ 0x1105, "OBEXObjectPush",
+		goep_attrib_names, sizeof(goep_attrib_names)/sizeof(struct attrib_def) },
+	{ 0x1106, "OBEXFileTransfer",
+		goep_attrib_names, sizeof(goep_attrib_names)/sizeof(struct attrib_def) },
 	{ 0x1107, "IrMCSyncCommand", NULL, 0 },
 	{ 0x1108, "Headset",
 		audio_attrib_names, sizeof(audio_attrib_names)/sizeof(struct attrib_def) },
@@ -1477,8 +1484,7 @@ static int add_headset_ag(sdp_session_t *session, svc_info_t *si)
 	sdp_list_t *aproto, *proto[2];
 	sdp_record_t record;
 	uint8_t u8 = si->channel ? si->channel : 7;
-	uint16_t u16 = 0x17;
-	sdp_data_t *channel, *features;
+	sdp_data_t *channel;
 	uint8_t netid = si->network ? si->network : 0x01; // ???? profile document
 	sdp_data_t *network = sdp_data_alloc(SDP_UINT8, &netid);
 	int ret = 0;
@@ -1510,9 +1516,6 @@ static int add_headset_ag(sdp_session_t *session, svc_info_t *si)
 	channel = sdp_data_alloc(SDP_UINT8, &u8);
 	proto[1] = sdp_list_append(proto[1], channel);
 	apseq = sdp_list_append(apseq, proto[1]);
-
-	features = sdp_data_alloc(SDP_UINT16, &u16);
-	sdp_attr_add(&record, SDP_ATTR_SUPPORTED_FEATURES, features);
 
 	aproto = sdp_list_append(0, apseq);
 	sdp_set_access_protos(&record, aproto);
@@ -3425,6 +3428,76 @@ static int add_semchla(sdp_session_t *session, svc_info_t *si)
 	return 0;
 }
 
+static int add_gatt(sdp_session_t *session, svc_info_t *si)
+{
+	sdp_list_t *svclass_id, *apseq, *proto[2], *profiles, *root, *aproto;
+	uuid_t root_uuid, proto_uuid, gatt_uuid, l2cap;
+	sdp_profile_desc_t profile;
+	sdp_record_t record;
+	sdp_data_t *psm, *sh, *eh;
+	uint16_t att_psm = 27, start = 0x0001, end = 0x000f;
+	int ret;
+
+	memset(&record, 0, sizeof(sdp_record_t));
+	record.handle = si->handle;
+	sdp_uuid16_create(&root_uuid, PUBLIC_BROWSE_GROUP);
+	root = sdp_list_append(NULL, &root_uuid);
+	sdp_set_browse_groups(&record, root);
+	sdp_list_free(root, NULL);
+
+	sdp_uuid16_create(&gatt_uuid, GENERIC_ATTRIB_SVCLASS_ID);
+	svclass_id = sdp_list_append(NULL, &gatt_uuid);
+	sdp_set_service_classes(&record, svclass_id);
+	sdp_list_free(svclass_id, NULL);
+
+	sdp_uuid16_create(&profile.uuid, GENERIC_ATTRIB_PROFILE_ID);
+	profile.version = 0x0100;
+	profiles = sdp_list_append(NULL, &profile);
+	sdp_set_profile_descs(&record, profiles);
+	sdp_list_free(profiles, NULL);
+
+	sdp_uuid16_create(&l2cap, L2CAP_UUID);
+	proto[0] = sdp_list_append(NULL, &l2cap);
+	psm = sdp_data_alloc(SDP_UINT16, &att_psm);
+	proto[0] = sdp_list_append(proto[0], psm);
+	apseq = sdp_list_append(NULL, proto[0]);
+
+	sdp_uuid16_create(&proto_uuid, ATT_UUID);
+	proto[1] = sdp_list_append(NULL, &proto_uuid);
+	sh = sdp_data_alloc(SDP_UINT16, &start);
+	proto[1] = sdp_list_append(proto[1], sh);
+	eh = sdp_data_alloc(SDP_UINT16, &end);
+	proto[1] = sdp_list_append(proto[1], eh);
+	apseq = sdp_list_append(apseq, proto[1]);
+
+	aproto = sdp_list_append(NULL, apseq);
+	sdp_set_access_protos(&record, aproto);
+
+	sdp_set_info_attr(&record, "Generic Attribute Profile", "BlueZ", NULL);
+
+	sdp_set_url_attr(&record, "http://www.bluez.org/",
+			"http://www.bluez.org/", "http://www.bluez.org/");
+
+	sdp_set_service_id(&record, gatt_uuid);
+
+	ret = sdp_device_record_register(session, &interface, &record,
+							SDP_RECORD_PERSIST);
+	if (ret	< 0)
+		printf("Service Record registration failed\n");
+	else
+		printf("Generic Attribute Profile Service registered\n");
+
+	sdp_data_free(psm);
+	sdp_data_free(sh);
+	sdp_data_free(eh);
+	sdp_list_free(proto[0], NULL);
+	sdp_list_free(proto[1], NULL);
+	sdp_list_free(apseq, NULL);
+	sdp_list_free(aproto, NULL);
+
+	return ret;
+}
+
 struct {
 	char		*name;
 	uint32_t	class;
@@ -3483,6 +3556,7 @@ struct {
 	{ "APPLE",	0,				add_apple,	apple_uuid	},
 
 	{ "ISYNC",	APPLE_AGENT_SVCLASS_ID,		add_isync,	},
+	{ "GATT",	GENERIC_ATTRIB_SVCLASS_ID,	add_gatt,	},
 
 	{ 0 }
 };
@@ -4049,10 +4123,9 @@ static int cmd_records(int argc, char **argv)
 			context.handle = base[i] + n;
 			err = get_service(&bdaddr, &context, 1);
 			if (err < 0)
-				goto done;
+				return 0;
 		}
 
-done:
 	return 0;
 }
 

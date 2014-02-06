@@ -128,7 +128,8 @@ static int hci_str2uint(hci_map *map, char *str, unsigned int *val)
 	while ((t = strsep(&ptr, ","))) {
 		for (m = map; m->str; m++) {
 			if (!strcasecmp(m->str,t)) {
-				*val = (unsigned int) m->val; set = 1;
+				*val = (unsigned int) m->val;
+				set = 1;
 				break;
 			}
 		}
@@ -170,8 +171,8 @@ char *hci_typetostr(int type)
 	switch (type) {
 	case HCI_BREDR:
 		return "BR/EDR";
-	case HCI_80211:
-		return "802.11";
+	case HCI_AMP:
+		return "AMP";
 	default:
 		return "UNKNOWN";
 	}
@@ -771,7 +772,8 @@ char *lmp_featurestostr(uint8_t *features, char *pref, int width)
 
 		while (m->str) {
 			if (m->val & features[i])
-				size += strlen(m->str) + (pref ? strlen(pref) : 0) + 1;
+				size += strlen(m->str) +
+						(pref ? strlen(pref) : 0) + 1;
 			m++;
 		}
 	}
@@ -793,7 +795,8 @@ char *lmp_featurestostr(uint8_t *features, char *pref, int width)
 		while (m->str) {
 			if (m->val & features[i]) {
 				if (strlen(off) + strlen(m->str) > maxwidth) {
-					ptr += sprintf(ptr, "\n%s", pref ? pref : "");
+					ptr += sprintf(ptr, "\n%s",
+							pref ? pref : "");
 					off = ptr;
 				}
 				ptr += sprintf(ptr, "%s ", m->str);
@@ -806,8 +809,8 @@ char *lmp_featurestostr(uint8_t *features, char *pref, int width)
 }
 
 /* HCI functions that do not require open device */
-
-int hci_for_each_dev(int flag, int (*func)(int dd, int dev_id, long arg), long arg)
+int hci_for_each_dev(int flag, int (*func)(int dd, int dev_id, long arg),
+			long arg)
 {
 	struct hci_dev_list_req *dl;
 	struct hci_dev_req *dr;
@@ -857,7 +860,7 @@ done:
 
 static int __other_bdaddr(int dd, int dev_id, long arg)
 {
-	struct hci_dev_info di = { dev_id: dev_id };
+	struct hci_dev_info di = { .dev_id = dev_id };
 
 	if (ioctl(dd, HCIGETDEVINFO, (void *) &di))
 		return 0;
@@ -870,7 +873,7 @@ static int __other_bdaddr(int dd, int dev_id, long arg)
 
 static int __same_bdaddr(int dd, int dev_id, long arg)
 {
-	struct hci_dev_info di = { dev_id: dev_id };
+	struct hci_dev_info di = { .dev_id = dev_id };
 
 	if (ioctl(dd, HCIGETDEVINFO, (void *) &di))
 		return 0;
@@ -941,7 +944,8 @@ int hci_devba(int dev_id, bdaddr_t *bdaddr)
 	return 0;
 }
 
-int hci_inquiry(int dev_id, int len, int nrsp, const uint8_t *lap, inquiry_info **ii, long flags)
+int hci_inquiry(int dev_id, int len, int nrsp, const uint8_t *lap,
+		inquiry_info **ii, long flags)
 {
 	struct hci_inquiry_req *ir;
 	uint8_t num_rsp = nrsp;
@@ -1093,6 +1097,7 @@ int hci_send_req(int dd, struct hci_request *r, int to)
 	hci_filter_set_ptype(HCI_EVENT_PKT,  &nf);
 	hci_filter_set_event(EVT_CMD_STATUS, &nf);
 	hci_filter_set_event(EVT_CMD_COMPLETE, &nf);
+	hci_filter_set_event(EVT_LE_META_EVENT, &nf);
 	hci_filter_set_event(r->event, &nf);
 	hci_filter_set_opcode(opcode, &nf);
 	if (setsockopt(dd, SOL_HCI, HCI_FILTER, &nf, sizeof(nf)) < 0)
@@ -1106,6 +1111,7 @@ int hci_send_req(int dd, struct hci_request *r, int to)
 		evt_cmd_complete *cc;
 		evt_cmd_status *cs;
 		evt_remote_name_req_complete *rn;
+		evt_le_meta_event *me;
 		remote_name_req_cp *cp;
 		int len;
 
@@ -1126,7 +1132,8 @@ int hci_send_req(int dd, struct hci_request *r, int to)
 			}
 
 			to -= 10;
-			if (to < 0) to = 0;
+			if (to < 0)
+				to = 0;
 
 		}
 
@@ -1186,6 +1193,17 @@ int hci_send_req(int dd, struct hci_request *r, int to)
 			memcpy(r->rparam, ptr, r->rlen);
 			goto done;
 
+		case EVT_LE_META_EVENT:
+			me = (void *) ptr;
+
+			if (me->subevent != r->event)
+				continue;
+
+			len -= 1;
+			r->rlen = MIN(len, r->rlen);
+			memcpy(r->rparam, me->data, r->rlen);
+			goto done;
+
 		default:
 			if (hdr->evt != r->event)
 				break;
@@ -1208,7 +1226,9 @@ done:
 	return 0;
 }
 
-int hci_create_connection(int dd, const bdaddr_t *bdaddr, uint16_t ptype, uint16_t clkoffset, uint8_t rswitch, uint16_t *handle, int to)
+int hci_create_connection(int dd, const bdaddr_t *bdaddr, uint16_t ptype,
+				uint16_t clkoffset, uint8_t rswitch,
+				uint16_t *handle, int to)
 {
 	evt_conn_complete rp;
 	create_conn_cp cp;
@@ -1271,6 +1291,113 @@ int hci_disconnect(int dd, uint16_t handle, uint8_t reason, int to)
 	return 0;
 }
 
+int hci_le_add_white_list(int dd, const bdaddr_t *bdaddr, uint8_t type, int to)
+{
+	struct hci_request rq;
+	le_add_device_to_white_list_cp cp;
+	uint8_t status;
+
+	memset(&cp, 0, sizeof(cp));
+	cp.bdaddr_type = type;
+	bacpy(&cp.bdaddr, bdaddr);
+
+	memset(&rq, 0, sizeof(rq));
+	rq.ogf = OGF_LE_CTL;
+	rq.ocf = OCF_LE_ADD_DEVICE_TO_WHITE_LIST;
+	rq.cparam = &cp;
+	rq.clen = LE_ADD_DEVICE_TO_WHITE_LIST_CP_SIZE;
+	rq.rparam = &status;
+	rq.rlen = 1;
+
+	if (hci_send_req(dd, &rq, to) < 0)
+		return -1;
+
+	if (status) {
+		errno = EIO;
+		return -1;
+	}
+
+	return 0;
+}
+
+int hci_le_rm_white_list(int dd, const bdaddr_t *bdaddr, uint8_t type, int to)
+{
+	struct hci_request rq;
+	le_remove_device_from_white_list_cp cp;
+	uint8_t status;
+
+	memset(&cp, 0, sizeof(cp));
+	cp.bdaddr_type = type;
+	bacpy(&cp.bdaddr, bdaddr);
+
+	memset(&rq, 0, sizeof(rq));
+	rq.ogf = OGF_LE_CTL;
+	rq.ocf = OCF_LE_REMOVE_DEVICE_FROM_WHITE_LIST;
+	rq.cparam = &cp;
+	rq.clen = LE_REMOVE_DEVICE_FROM_WHITE_LIST_CP_SIZE;
+	rq.rparam = &status;
+	rq.rlen = 1;
+
+	if (hci_send_req(dd, &rq, to) < 0)
+		return -1;
+
+	if (status) {
+		errno = EIO;
+		return -1;
+	}
+
+	return 0;
+}
+
+int hci_le_read_white_list_size(int dd, uint8_t *size, int to)
+{
+	struct hci_request rq;
+	le_read_white_list_size_rp rp;
+
+	memset(&rp, 0, sizeof(rp));
+	memset(&rq, 0, sizeof(rq));
+
+	rq.ogf = OGF_LE_CTL;
+	rq.ocf = OCF_LE_READ_WHITE_LIST_SIZE;
+	rq.rparam = &rp;
+	rq.rlen = LE_READ_WHITE_LIST_SIZE_RP_SIZE;
+
+	if (hci_send_req(dd, &rq, to) < 0)
+		return -1;
+
+	if (rp.status) {
+		errno = EIO;
+		return -1;
+	}
+
+	if (size)
+		*size = rp.size;
+
+	return 0;
+}
+
+int hci_le_clear_white_list(int dd, int to)
+{
+	struct hci_request rq;
+	uint8_t status;
+
+	memset(&rq, 0, sizeof(rq));
+	rq.ogf = OGF_LE_CTL;
+	rq.ocf = OCF_LE_CLEAR_WHITE_LIST;
+	rq.rparam = &status;
+	rq.rlen = 1;
+
+	if (hci_send_req(dd, &rq, to) < 0)
+		return -1;
+
+	if (status) {
+		errno = EIO;
+		return -1;
+	}
+
+	return 0;
+}
+
 int hci_read_local_name(int dd, int len, char *name, int to)
 {
 	read_local_name_rp rp;
@@ -1315,7 +1442,10 @@ int hci_write_local_name(int dd, const char *name, int to)
 	return 0;
 }
 
-int hci_read_remote_name_with_clock_offset(int dd, const bdaddr_t *bdaddr, uint8_t pscan_rep_mode, uint16_t clkoffset, int len, char *name, int to)
+int hci_read_remote_name_with_clock_offset(int dd, const bdaddr_t *bdaddr,
+						uint8_t pscan_rep_mode,
+						uint16_t clkoffset,
+						int len, char *name, int to)
 {
 	evt_remote_name_req_complete rn;
 	remote_name_req_cp cp;
@@ -1348,9 +1478,11 @@ int hci_read_remote_name_with_clock_offset(int dd, const bdaddr_t *bdaddr, uint8
 	return 0;
 }
 
-int hci_read_remote_name(int dd, const bdaddr_t *bdaddr, int len, char *name, int to)
+int hci_read_remote_name(int dd, const bdaddr_t *bdaddr, int len, char *name,
+				int to)
 {
-	return hci_read_remote_name_with_clock_offset(dd, bdaddr, 0x02, 0x0000, len, name, to);
+	return hci_read_remote_name_with_clock_offset(dd, bdaddr, 0x02, 0x0000,
+							len, name, to);
 }
 
 int hci_read_remote_name_cancel(int dd, const bdaddr_t *bdaddr, int to)
@@ -1373,7 +1505,8 @@ int hci_read_remote_name_cancel(int dd, const bdaddr_t *bdaddr, int to)
 	return 0;
 }
 
-int hci_read_remote_version(int dd, uint16_t handle, struct hci_version *ver, int to)
+int hci_read_remote_version(int dd, uint16_t handle, struct hci_version *ver,
+				int to)
 {
 	evt_read_remote_version_complete rp;
 	read_remote_version_cp cp;
@@ -1437,7 +1570,9 @@ int hci_read_remote_features(int dd, uint16_t handle, uint8_t *features, int to)
 	return 0;
 }
 
-int hci_read_remote_ext_features(int dd, uint16_t handle, uint8_t page, uint8_t *max_page, uint8_t *features, int to)
+int hci_read_remote_ext_features(int dd, uint16_t handle, uint8_t page,
+					uint8_t *max_page, uint8_t *features,
+					int to)
 {
 	evt_read_remote_ext_features_complete rp;
 	read_remote_ext_features_cp cp;
@@ -1580,7 +1715,8 @@ int hci_read_local_features(int dd, uint8_t *features, int to)
 	return 0;
 }
 
-int hci_read_local_ext_features(int dd, uint8_t page, uint8_t *max_page, uint8_t *features, int to)
+int hci_read_local_ext_features(int dd, uint8_t page, uint8_t *max_page,
+				uint8_t *features, int to)
 {
 	read_local_ext_features_cp cp;
 	read_local_ext_features_rp rp;
@@ -1921,7 +2057,8 @@ int hci_switch_role(int dd, bdaddr_t *bdaddr, uint8_t role, int to)
 	return 0;
 }
 
-int hci_park_mode(int dd, uint16_t handle, uint16_t max_interval, uint16_t min_interval, int to)
+int hci_park_mode(int dd, uint16_t handle, uint16_t max_interval,
+			uint16_t min_interval, int to)
 {
 	park_mode_cp cp;
 	evt_mode_change rp;
@@ -2154,7 +2291,7 @@ int hci_read_ext_inquiry_response(int dd, uint8_t *fec, uint8_t *data, int to)
 	}
 
 	*fec = rp.fec;
-	memcpy(data, rp.data, 240);
+	memcpy(data, rp.data, HCI_MAX_EIR_LENGTH);
 
 	return 0;
 }
@@ -2167,7 +2304,7 @@ int hci_write_ext_inquiry_response(int dd, uint8_t fec, uint8_t *data, int to)
 
 	memset(&cp, 0, sizeof(cp));
 	cp.fec = fec;
-	memcpy(cp.data, data, 240);
+	memcpy(cp.data, data, HCI_MAX_EIR_LENGTH);
 
 	memset(&rq, 0, sizeof(rq));
 	rq.ogf    = OGF_HOST_CTL;
@@ -2319,7 +2456,8 @@ int hci_write_inquiry_transmit_power_level(int dd, int8_t level, int to)
 	return 0;
 }
 
-int hci_read_transmit_power_level(int dd, uint16_t handle, uint8_t type, int8_t *level, int to)
+int hci_read_transmit_power_level(int dd, uint16_t handle, uint8_t type,
+					int8_t *level, int to)
 {
 	read_transmit_power_level_cp cp;
 	read_transmit_power_level_rp rp;
@@ -2403,7 +2541,8 @@ int hci_write_link_policy(int dd, uint16_t handle, uint16_t policy, int to)
 	return 0;
 }
 
-int hci_read_link_supervision_timeout(int dd, uint16_t handle, uint16_t *timeout, int to)
+int hci_read_link_supervision_timeout(int dd, uint16_t handle,
+					uint16_t *timeout, int to)
 {
 	read_link_supervision_timeout_rp rp;
 	struct hci_request rq;
@@ -2428,7 +2567,8 @@ int hci_read_link_supervision_timeout(int dd, uint16_t handle, uint16_t *timeout
 	return 0;
 }
 
-int hci_write_link_supervision_timeout(int dd, uint16_t handle, uint16_t timeout, int to)
+int hci_write_link_supervision_timeout(int dd, uint16_t handle,
+					uint16_t timeout, int to)
 {
 	write_link_supervision_timeout_cp cp;
 	write_link_supervision_timeout_rp rp;
@@ -2485,7 +2625,8 @@ int hci_set_afh_classification(int dd, uint8_t *map, int to)
 	return 0;
 }
 
-int hci_read_link_quality(int dd, uint16_t handle, uint8_t *link_quality, int to)
+int hci_read_link_quality(int dd, uint16_t handle, uint8_t *link_quality,
+				int to)
 {
 	read_link_quality_rp rp;
 	struct hci_request rq;
@@ -2535,7 +2676,8 @@ int hci_read_rssi(int dd, uint16_t handle, int8_t *rssi, int to)
 	return 0;
 }
 
-int hci_read_afh_map(int dd, uint16_t handle, uint8_t *mode, uint8_t *map, int to)
+int hci_read_afh_map(int dd, uint16_t handle, uint8_t *mode, uint8_t *map,
+			int to)
 {
 	read_afh_map_rp rp;
 	struct hci_request rq;
@@ -2561,7 +2703,8 @@ int hci_read_afh_map(int dd, uint16_t handle, uint8_t *mode, uint8_t *map, int t
 	return 0;
 }
 
-int hci_read_clock(int dd, uint16_t handle, uint8_t which, uint32_t *clock, uint16_t *accuracy, int to)
+int hci_read_clock(int dd, uint16_t handle, uint8_t which, uint32_t *clock,
+			uint16_t *accuracy, int to)
 {
 	read_clock_cp cp;
 	read_clock_rp rp;
@@ -2589,5 +2732,182 @@ int hci_read_clock(int dd, uint16_t handle, uint8_t which, uint32_t *clock, uint
 
 	*clock    = rp.clock;
 	*accuracy = rp.accuracy;
+	return 0;
+}
+
+int hci_le_set_scan_enable(int dd, uint8_t enable, uint8_t filter_dup, int to)
+{
+	struct hci_request rq;
+	le_set_scan_enable_cp scan_cp;
+	uint8_t status;
+
+	memset(&scan_cp, 0, sizeof(scan_cp));
+	scan_cp.enable = enable;
+	scan_cp.filter_dup = filter_dup;
+
+	memset(&rq, 0, sizeof(rq));
+	rq.ogf = OGF_LE_CTL;
+	rq.ocf = OCF_LE_SET_SCAN_ENABLE;
+	rq.cparam = &scan_cp;
+	rq.clen = LE_SET_SCAN_ENABLE_CP_SIZE;
+	rq.rparam = &status;
+	rq.rlen = 1;
+
+	if (hci_send_req(dd, &rq, to) < 0)
+		return -1;
+
+	if (status) {
+		errno = EIO;
+		return -1;
+	}
+
+	return 0;
+}
+
+int hci_le_set_scan_parameters(int dd, uint8_t type,
+					uint16_t interval, uint16_t window,
+					uint8_t own_type, uint8_t filter, int to)
+{
+	struct hci_request rq;
+	le_set_scan_parameters_cp param_cp;
+	uint8_t status;
+
+	memset(&param_cp, 0, sizeof(param_cp));
+	param_cp.type = type;
+	param_cp.interval = interval;
+	param_cp.window = window;
+	param_cp.own_bdaddr_type = own_type;
+	param_cp.filter = filter;
+
+	memset(&rq, 0, sizeof(rq));
+	rq.ogf = OGF_LE_CTL;
+	rq.ocf = OCF_LE_SET_SCAN_PARAMETERS;
+	rq.cparam = &param_cp;
+	rq.clen = LE_SET_SCAN_PARAMETERS_CP_SIZE;
+	rq.rparam = &status;
+	rq.rlen = 1;
+
+	if (hci_send_req(dd, &rq, to) < 0)
+		return -1;
+
+	if (status) {
+		errno = EIO;
+		return -1;
+	}
+
+	return 0;
+}
+
+int hci_le_set_advertise_enable(int dd, uint8_t enable, int to)
+{
+	struct hci_request rq;
+	le_set_advertise_enable_cp adv_cp;
+	uint8_t status;
+
+	memset(&adv_cp, 0, sizeof(adv_cp));
+	adv_cp.enable = enable;
+
+	memset(&rq, 0, sizeof(rq));
+	rq.ogf = OGF_LE_CTL;
+	rq.ocf = OCF_LE_SET_ADVERTISE_ENABLE;
+	rq.cparam = &adv_cp;
+	rq.clen = LE_SET_ADVERTISE_ENABLE_CP_SIZE;
+	rq.rparam = &status;
+	rq.rlen = 1;
+
+	if (hci_send_req(dd, &rq, to) < 0)
+		return -1;
+
+	if (status) {
+		errno = EIO;
+		return -1;
+	}
+
+	return 0;
+}
+
+int hci_le_create_conn(int dd, uint16_t interval, uint16_t window,
+		uint8_t initiator_filter, uint8_t peer_bdaddr_type,
+		bdaddr_t peer_bdaddr, uint8_t own_bdaddr_type,
+		uint16_t min_interval, 	uint16_t max_interval,
+		uint16_t latency, uint16_t supervision_timeout,
+		uint16_t min_ce_length, uint16_t max_ce_length,
+		uint16_t *handle, int to)
+{
+	struct hci_request rq;
+	le_create_connection_cp create_conn_cp;
+	evt_le_connection_complete conn_complete_rp;
+
+	memset(&create_conn_cp, 0, sizeof(create_conn_cp));
+	create_conn_cp.interval = interval;
+	create_conn_cp.window = window;
+	create_conn_cp.initiator_filter = initiator_filter;
+	create_conn_cp.peer_bdaddr_type = peer_bdaddr_type;
+	create_conn_cp.peer_bdaddr = peer_bdaddr;
+	create_conn_cp.own_bdaddr_type = own_bdaddr_type;
+	create_conn_cp.min_interval = min_interval;
+	create_conn_cp.max_interval = max_interval;
+	create_conn_cp.latency = latency;
+	create_conn_cp.supervision_timeout = supervision_timeout;
+	create_conn_cp.min_ce_length = min_ce_length;
+	create_conn_cp.max_ce_length = max_ce_length;
+
+	memset(&rq, 0, sizeof(rq));
+	rq.ogf = OGF_LE_CTL;
+	rq.ocf = OCF_LE_CREATE_CONN;
+	rq.event = EVT_LE_CONN_COMPLETE;
+	rq.cparam = &create_conn_cp;
+	rq.clen = LE_CREATE_CONN_CP_SIZE;
+	rq.rparam = &conn_complete_rp;
+	rq.rlen = EVT_CONN_COMPLETE_SIZE;
+
+	if (hci_send_req(dd, &rq, to) < 0)
+		return -1;
+
+	if (conn_complete_rp.status) {
+		errno = EIO;
+		return -1;
+	}
+
+	if (handle)
+		*handle = conn_complete_rp.handle;
+
+	return 0;
+}
+
+int hci_le_conn_update(int dd, uint16_t handle, uint16_t min_interval,
+			uint16_t max_interval, uint16_t latency,
+			uint16_t supervision_timeout, int to)
+{
+	evt_le_connection_update_complete evt;
+	le_connection_update_cp cp;
+	struct hci_request rq;
+
+	memset(&cp, 0, sizeof(cp));
+	cp.handle = handle;
+	cp.min_interval = min_interval;
+	cp.max_interval = max_interval;
+	cp.latency = latency;
+	cp.supervision_timeout = supervision_timeout;
+	cp.min_ce_length = htobs(0x0001);
+	cp.max_ce_length = htobs(0x0001);
+
+	memset(&rq, 0, sizeof(rq));
+	rq.ogf = OGF_LE_CTL;
+	rq.ocf = OCF_LE_CONN_UPDATE;
+	rq.cparam = &cp;
+	rq.clen = LE_CONN_UPDATE_CP_SIZE;
+	rq.event = EVT_LE_CONN_UPDATE_COMPLETE;
+	rq.rparam = &evt;
+	rq.rlen = sizeof(evt);
+
+	if (hci_send_req(dd, &rq, to) < 0)
+		return -1;
+
+	if (evt.status) {
+		errno = EIO;
+		return -1;
+	}
+
 	return 0;
 }

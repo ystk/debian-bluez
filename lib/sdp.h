@@ -32,6 +32,7 @@ extern "C" {
 #endif
 
 #include <stdint.h>
+#include <bluetooth/bluetooth.h>
 
 #define SDP_UNIX_PATH "/var/run/sdp"
 #define SDP_RESPONSE_TIMEOUT	20
@@ -43,7 +44,7 @@ extern "C" {
  * All definitions are based on Bluetooth Assigned Numbers
  * of the Bluetooth Specification
  */
-#define SDP_PSM 		0x0001
+#define SDP_PSM		0x0001
 
 /*
  * Protocol UUIDs
@@ -54,6 +55,7 @@ extern "C" {
 #define TCP_UUID	0x0004
 #define TCS_BIN_UUID	0x0005
 #define TCS_AT_UUID	0x0006
+#define ATT_UUID	0x0007
 #define OBEX_UUID	0x0008
 #define IP_UUID		0x0009
 #define FTP_UUID	0x000a
@@ -144,6 +146,7 @@ extern "C" {
 #define HDP_SOURCE_SVCLASS_ID		0x1401
 #define HDP_SINK_SVCLASS_ID		0x1402
 #define APPLE_AGENT_SVCLASS_ID		0x2112
+#define GENERIC_ATTRIB_SVCLASS_ID	0x1801
 
 /*
  * Standard profile descriptor identifiers; note these
@@ -216,6 +219,8 @@ extern "C" {
 #define HDP_SOURCE_PROFILE_ID		HDP_SOURCE_SVCLASS_ID
 #define HDP_SINK_PROFILE_ID		HDP_SINK_SVCLASS_ID
 #define APPLE_AGENT_PROFILE_ID		APPLE_AGENT_SVCLASS_ID
+#define GENERIC_ACCESS_PROFILE_ID	0x1800
+#define GENERIC_ATTRIB_PROFILE_ID	GENERIC_ATTRIB_SVCLASS_ID
 
 /*
  * Compatibility macros for the old MDP acronym
@@ -314,7 +319,7 @@ extern "C" {
  * #define XXXLangBase yyyy
  * #define AttrServiceName_XXX	0x0000+XXXLangBase
  */
-#define SDP_PRIMARY_LANG_BASE 		0x0100
+#define SDP_PRIMARY_LANG_BASE		0x0100
 
 #define SDP_ATTR_SVCNAME_PRIMARY	0x0000 + SDP_PRIMARY_LANG_BASE
 #define SDP_ATTR_SVCDESC_PRIMARY	0x0001 + SDP_PRIMARY_LANG_BASE
@@ -339,8 +344,8 @@ extern "C" {
  * DataSequence and DataSequenceAlternates can be of size 2^{8, 16, 32}
  * The size are computed post-facto in the API and are not known apriori
  */
-#define SDP_DATA_NIL 		0x00
-#define SDP_UINT8  		0x08
+#define SDP_DATA_NIL		0x00
+#define SDP_UINT8		0x08
 #define SDP_UINT16		0x09
 #define SDP_UINT32		0x0A
 #define SDP_UINT64		0x0B
@@ -416,9 +421,6 @@ typedef struct {
  * Common definitions for attributes in the SDP.
  * Should the type of any of these change, you need only make a change here.
  */
-typedef struct {
-	uint8_t data[16];
-} uint128_t;
 
 typedef struct {
 	uint8_t type;

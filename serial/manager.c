@@ -42,8 +42,6 @@
 #include <sys/un.h>
 
 #include <bluetooth/bluetooth.h>
-#include <bluetooth/hci.h>
-#include <bluetooth/hci_lib.h>
 #include <bluetooth/sdp.h>
 #include <bluetooth/sdp_lib.h>
 #include <bluetooth/rfcomm.h>
@@ -56,7 +54,6 @@
 #include "device.h"
 
 #include "log.h"
-#include "textfile.h"
 
 #include "error.h"
 #include "port.h"
@@ -98,7 +95,7 @@ static int serial_probe(struct btd_device *device, const char *uuid)
 	}
 
 	adapter_get_address(adapter, &src);
-	device_get_address(device, &dst);
+	device_get_address(device, &dst, NULL);
 
 	return port_register(connection, path, &src, &dst, uuid, ch);
 }
