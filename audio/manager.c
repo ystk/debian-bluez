@@ -39,9 +39,6 @@
 #include <signal.h>
 
 #include <bluetooth/bluetooth.h>
-#include <bluetooth/hci.h>
-#include <bluetooth/hci_lib.h>
-#include <bluetooth/rfcomm.h>
 #include <bluetooth/sdp.h>
 #include <bluetooth/sdp_lib.h>
 
@@ -51,25 +48,31 @@
 
 #include "glib-helper.h"
 #include "btio.h"
-#include "../src/manager.h"
 #include "../src/adapter.h"
+#include "../src/manager.h"
 #include "../src/device.h"
 
 #include "log.h"
-#include "textfile.h"
 #include "ipc.h"
 #include "device.h"
 #include "error.h"
 #include "avdtp.h"
+#include "media.h"
 #include "a2dp.h"
 #include "headset.h"
 #include "gateway.h"
 #include "sink.h"
 #include "source.h"
+#include "avrcp.h"
 #include "control.h"
 #include "manager.h"
 #include "sdpd.h"
 #include "telephony.h"
+#include "unix.h"
+
+#ifndef DBUS_TYPE_UNIX_FD
+#define DBUS_TYPE_UNIX_FD -1
+#endif
 
 typedef enum {
 	HEADSET	= 1 << 0,
@@ -90,6 +93,7 @@ typedef enum {
 
 struct audio_adapter {
 	struct btd_adapter *btd_adapter;
+	gboolean powered;
 	uint32_t hsp_ag_record_id;
 	uint32_t hfp_ag_record_id;
 	uint32_t hfp_hs_record_id;
@@ -113,15 +117,15 @@ static struct enabled_interfaces enabled = {
 	.sink		= TRUE,
 	.source		= FALSE,
 	.control	= TRUE,
+	.socket		= FALSE,
+	.media		= TRUE,
 };
 
 static struct audio_adapter *find_adapter(GSList *list,
 					struct btd_adapter *btd_adapter)
 {
-	GSList *l;
-
-	for (l = list; l; l = l->next) {
-		struct audio_adapter *adapter = l->data;
+	for (; list; list = list->next) {
+		struct audio_adapter *adapter = list->data;
 
 		if (adapter->btd_adapter == btd_adapter)
 			return adapter;
@@ -171,8 +175,7 @@ static void handle_uuid(const char *uuidstr, struct audio_device *device)
 	uuid16 = uuid.value.uuid16;
 
 	if (!server_is_enabled(&device->src, uuid16)) {
-		DBG("audio handle_uuid: server not enabled for %s (0x%04x)",
-				uuidstr, uuid16);
+		DBG("server not enabled for %s (0x%04x)", uuidstr, uuid16);
 		return;
 	}
 
@@ -216,9 +219,10 @@ static void handle_uuid(const char *uuidstr, struct audio_device *device)
 		DBG("Found AV %s", uuid16 == AV_REMOTE_SVCLASS_ID ?
 							"Remote" : "Target");
 		if (device->control)
-			control_update(device, uuid16);
+			control_update(device->control, uuid16);
 		else
 			device->control = control_init(device, uuid16);
+
 		if (device->sink && sink_is_active(device))
 			avrcp_connect(device);
 		break;
@@ -351,11 +355,17 @@ static sdp_record_t *hfp_ag_record(uint8_t ch, uint32_t feat)
 	sdp_data_t *channel, *features;
 	uint8_t netid = 0x01;
 	uint16_t sdpfeat;
-	sdp_data_t *network = sdp_data_alloc(SDP_UINT8, &netid);
+	sdp_data_t *network;
 
 	record = sdp_record_alloc();
 	if (!record)
 		return NULL;
+
+	network = sdp_data_alloc(SDP_UINT8, &netid);
+	if (!network) {
+		sdp_record_free(record);
+		return NULL;
+	}
 
 	sdp_uuid16_create(&root_uuid, PUBLIC_BROWSE_GROUP);
 	root = sdp_list_append(0, &root_uuid);
@@ -499,7 +509,8 @@ static void ag_confirm(GIOChannel *chan, gpointer data)
 		goto drop;
 	}
 
-	set_hfp_active(device, hfp_active);
+	headset_set_hfp_active(device, hfp_active);
+	headset_set_rfcomm_initiator(device, TRUE);
 
 	if (headset_connect_rfcomm(device, chan) < 0) {
 		error("headset_connect_rfcomm failed");
@@ -532,9 +543,10 @@ static void gateway_auth_cb(DBusError *derr, void *user_data)
 {
 	struct audio_device *device = user_data;
 
-	if (derr && dbus_error_is_set(derr))
+	if (derr && dbus_error_is_set(derr)) {
 		error("Access denied: %s", derr->message);
-	else {
+		gateway_set_state(device, GATEWAY_STATE_DISCONNECTED);
+	} else {
 		char ag_address[18];
 
 		ba2str(&device->dst, ag_address);
@@ -551,7 +563,6 @@ static void hf_io_cb(GIOChannel *chan, gpointer data)
 	GError *err = NULL;
 	uint8_t ch;
 	const char *server_uuid, *remote_uuid;
-	uint16_t svclass;
 	struct audio_device *device;
 	int perr;
 
@@ -569,7 +580,6 @@ static void hf_io_cb(GIOChannel *chan, gpointer data)
 
 	server_uuid = HFP_AG_UUID;
 	remote_uuid = HFP_HS_UUID;
-	svclass = HANDSFREE_AGW_SVCLASS_ID;
 
 	device = manager_get_device(&src, &dst, TRUE);
 	if (!device)
@@ -581,7 +591,7 @@ static void hf_io_cb(GIOChannel *chan, gpointer data)
 			goto drop;
 	}
 
-	if (gateway_is_connected(device)) {
+	if (gateway_is_active(device)) {
 		DBG("Refusing new connection since one already exists");
 		goto drop;
 	}
@@ -595,14 +605,13 @@ static void hf_io_cb(GIOChannel *chan, gpointer data)
 						gateway_auth_cb, device);
 	if (perr < 0) {
 		DBG("Authorization denied!");
-		goto drop;
+		gateway_set_state(device, GATEWAY_STATE_DISCONNECTED);
 	}
 
 	return;
 
 drop:
 	g_io_channel_shutdown(chan, TRUE, NULL);
-	g_io_channel_unref(chan);
 }
 
 static int headset_server_init(struct audio_adapter *adapter)
@@ -687,8 +696,11 @@ static int headset_server_init(struct audio_adapter *adapter)
 	return 0;
 
 failed:
-	error("%s", err->message);
-	g_error_free(err);
+	if (err) {
+		error("%s", err->message);
+		g_error_free(err);
+	}
+
 	if (adapter->hsp_ag_server) {
 		g_io_channel_shutdown(adapter->hsp_ag_server, TRUE, NULL);
 		g_io_channel_unref(adapter->hsp_ag_server);
@@ -766,11 +778,11 @@ static int audio_probe(struct btd_device *device, GSList *uuids)
 	struct audio_device *audio_dev;
 
 	adapter_get_address(adapter, &src);
-	device_get_address(device, &dst);
+	device_get_address(device, &dst, NULL);
 
 	audio_dev = manager_get_device(&src, &dst, TRUE);
 	if (!audio_dev) {
-		DBG("audio_probe: unable to get a device object");
+		DBG("unable to get a device object");
 		return -1;
 	}
 
@@ -800,7 +812,7 @@ static struct audio_adapter *audio_adapter_ref(struct audio_adapter *adp)
 {
 	adp->ref++;
 
-	DBG("audio_adapter_ref(%p): ref=%d", adp, adp->ref);
+	DBG("%p: ref=%d", adp, adp->ref);
 
 	return adp;
 }
@@ -809,7 +821,7 @@ static void audio_adapter_unref(struct audio_adapter *adp)
 {
 	adp->ref--;
 
-	DBG("audio_adapter_unref(%p): ref=%d", adp, adp->ref);
+	DBG("%p: ref=%d", adp, adp->ref);
 
 	if (adp->ref > 0)
 		return;
@@ -845,6 +857,49 @@ static struct audio_adapter *audio_adapter_get(struct btd_adapter *adapter)
 	return adp;
 }
 
+static void state_changed(struct btd_adapter *adapter, gboolean powered)
+{
+	struct audio_adapter *adp;
+	static gboolean telephony = FALSE;
+	GSList *l;
+
+	DBG("%s powered %s", adapter_get_path(adapter),
+						powered ? "on" : "off");
+
+	/* ignore powered change, adapter is powering down */
+	if (powered && adapter_powering_down(adapter))
+		return;
+
+	adp = find_adapter(adapters, adapter);
+	if (!adp)
+		return;
+
+	adp->powered = powered;
+
+	if (powered) {
+		/* telephony driver already initialized*/
+		if (telephony == TRUE)
+			return;
+		telephony_init();
+		telephony = TRUE;
+		return;
+	}
+
+	/* telephony not initialized just ignore power down */
+	if (telephony == FALSE)
+		return;
+
+	for (l = adapters; l; l = l->next) {
+		adp = l->data;
+
+		if (adp->powered == TRUE)
+			return;
+	}
+
+	telephony_exit();
+	telephony = FALSE;
+}
+
 static int headset_server_probe(struct btd_adapter *adapter)
 {
 	struct audio_adapter *adp;
@@ -857,11 +912,15 @@ static int headset_server_probe(struct btd_adapter *adapter)
 	if (!adp)
 		return -EINVAL;
 
-	err = headset_server_init(adp);
-	if (err < 0)
-		audio_adapter_unref(adp);
+	btd_adapter_register_powered_callback(adapter, state_changed);
 
-	return err;
+	err = headset_server_init(adp);
+	if (err < 0) {
+		audio_adapter_unref(adp);
+		return err;
+	}
+
+	return 0;
 }
 
 static void headset_server_remove(struct btd_adapter *adapter)
@@ -896,6 +955,8 @@ static void headset_server_remove(struct btd_adapter *adapter)
 		g_io_channel_unref(adp->hfp_ag_server);
 		adp->hfp_ag_server = NULL;
 	}
+
+	btd_adapter_unregister_powered_callback(adapter, state_changed);
 
 	audio_adapter_unref(adp);
 }
@@ -1008,6 +1069,38 @@ static void avrcp_server_remove(struct btd_adapter *adapter)
 	audio_adapter_unref(adp);
 }
 
+static int media_server_probe(struct btd_adapter *adapter)
+{
+	struct audio_adapter *adp;
+	const gchar *path = adapter_get_path(adapter);
+	bdaddr_t src;
+
+	DBG("path %s", path);
+
+	adp = audio_adapter_get(adapter);
+	if (!adp)
+		return -EINVAL;
+
+	adapter_get_address(adapter, &src);
+
+	return media_register(connection, path, &src);
+}
+
+static void media_server_remove(struct btd_adapter *adapter)
+{
+	struct audio_adapter *adp;
+	const gchar *path = adapter_get_path(adapter);
+
+	DBG("path %s", path);
+
+	adp = find_adapter(adapters, adapter);
+	if (!adp)
+		return;
+
+	media_unregister(path);
+	audio_adapter_unref(adp);
+}
+
 static struct btd_device_driver audio_driver = {
 	.name	= "audio",
 	.uuids	= BTD_UUIDS(HSP_HS_UUID, HFP_HS_UUID, HSP_AG_UUID, HFP_AG_UUID,
@@ -1041,6 +1134,12 @@ static struct btd_adapter_driver avrcp_server_driver = {
 	.remove	= avrcp_server_remove,
 };
 
+static struct btd_adapter_driver media_server_driver = {
+	.name	= "media",
+	.probe	= media_server_probe,
+	.remove	= media_server_remove,
+};
+
 int audio_manager_init(DBusConnection *conn, GKeyFile *conf,
 							gboolean *enable_sco)
 {
@@ -1069,6 +1168,11 @@ int audio_manager_init(DBusConnection *conn, GKeyFile *conf,
 			enabled.source = TRUE;
 		else if (g_str_equal(list[i], "Control"))
 			enabled.control = TRUE;
+		else if (g_str_equal(list[i], "Socket"))
+			enabled.socket = TRUE;
+		else if (g_str_equal(list[i], "Media"))
+			enabled.media = TRUE;
+
 	}
 	g_strfreev(list);
 
@@ -1085,6 +1189,10 @@ int audio_manager_init(DBusConnection *conn, GKeyFile *conf,
 			enabled.source = FALSE;
 		else if (g_str_equal(list[i], "Control"))
 			enabled.control = FALSE;
+		else if (g_str_equal(list[i], "Socket"))
+			enabled.socket = FALSE;
+		else if (g_str_equal(list[i], "Media"))
+			enabled.media = FALSE;
 	}
 	g_strfreev(list);
 
@@ -1112,10 +1220,14 @@ int audio_manager_init(DBusConnection *conn, GKeyFile *conf,
 		max_connected_headsets = i;
 
 proceed:
-	if (enabled.headset) {
-		telephony_init();
+	if (enabled.socket)
+		unix_init();
+
+	if (enabled.media)
+		btd_register_adapter_driver(&media_server_driver);
+
+	if (enabled.headset)
 		btd_register_adapter_driver(&headset_server_driver);
-	}
 
 	if (enabled.gateway)
 		btd_register_adapter_driver(&gateway_server_driver);
@@ -1147,10 +1259,14 @@ void audio_manager_exit(void)
 		config = NULL;
 	}
 
-	if (enabled.headset) {
+	if (enabled.socket)
+		unix_exit();
+
+	if (enabled.media)
+		btd_unregister_adapter_driver(&media_server_driver);
+
+	if (enabled.headset)
 		btd_unregister_adapter_driver(&headset_server_driver);
-		telephony_exit();
-	}
 
 	if (enabled.gateway)
 		btd_unregister_adapter_driver(&gateway_server_driver);
@@ -1270,7 +1386,7 @@ gboolean manager_allow_headset_connection(struct audio_device *device)
 		if (dev == device)
 			continue;
 
-		if (bacmp(&dev->src, &device->src))
+		if (device && bacmp(&dev->src, &device->src) != 0)
 			continue;
 
 		if (!hs)
@@ -1284,4 +1400,23 @@ gboolean manager_allow_headset_connection(struct audio_device *device)
 	}
 
 	return TRUE;
+}
+
+void manager_set_fast_connectable(gboolean enable)
+{
+	GSList *l;
+
+	if (enable && !manager_allow_headset_connection(NULL)) {
+		DBG("Refusing enabling fast connectable");
+		return;
+	}
+
+	for (l = adapters; l != NULL; l = l->next) {
+		struct audio_adapter *adapter = l->data;
+
+		if (btd_adapter_set_fast_connectable(adapter->btd_adapter,
+								enable))
+			error("Changing fast connectable for hci%d failed",
+				adapter_get_dev_id(adapter->btd_adapter));
+	}
 }
