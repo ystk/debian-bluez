@@ -27,7 +27,6 @@
 #include <config.h>
 #endif
 
-#define _GNU_SOURCE
 #include <stdio.h>
 #include <errno.h>
 #include <fcntl.h>
@@ -49,10 +48,6 @@
 
 #include "hciattach.h"
 
-#ifdef NEED_PPOLL
-#include "ppoll.h"
-#endif
-
 struct uart_t {
 	char *type;
 	int  m_id;
@@ -68,6 +63,7 @@ struct uart_t {
 };
 
 #define FLOW_CTL	0x0001
+#define AMP_DEV		0x0002
 #define ENABLE_PM	1
 #define DISABLE_PM	0
 
@@ -88,7 +84,7 @@ static void sig_alarm(int sig)
 	exit(1);
 }
 
-static int uart_speed(int s)
+int uart_speed(int s)
 {
 	switch (s) {
 	case 9600:
@@ -130,6 +126,10 @@ static int uart_speed(int s)
 #ifdef B3500000
 	case 3500000:
 		return B3500000;
+#endif
+#ifdef B3710000
+	case 3710000
+		return B3710000;
 #endif
 #ifdef B4000000
 	case 4000000:
@@ -320,6 +320,16 @@ static int ath3k_pm(int fd, struct uart_t *u, struct termios *ti)
 static int qualcomm(int fd, struct uart_t *u, struct termios *ti)
 {
 	return qualcomm_init(fd, u->speed, ti, u->bdaddr);
+}
+
+static int intel(int fd, struct uart_t *u, struct termios *ti)
+{
+	return intel_init(fd, u->init_speed, &u->speed, ti);
+}
+
+static int bcm43xx(int fd, struct uart_t *u, struct termios *ti)
+{
+	return bcm43xx_init(fd, u->speed, ti, u->bdaddr);
 }
 
 static int read_check(int fd, void *buf, int count)
@@ -1130,12 +1140,28 @@ struct uart_t uart[] = {
 	{ "bcm2035",    0x0A5C, 0x2035, HCI_UART_H4,   115200, 460800,
 				FLOW_CTL, DISABLE_PM, NULL, bcm2035  },
 
+	/* Broadcom BCM43XX */
+	{ "bcm43xx",    0x0000, 0x0000, HCI_UART_H4,   115200, 3000000,
+				FLOW_CTL, DISABLE_PM, NULL, bcm43xx, NULL  },
+
 	{ "ath3k",    0x0000, 0x0000, HCI_UART_ATH3K, 115200, 115200,
 			FLOW_CTL, DISABLE_PM, NULL, ath3k_ps, ath3k_pm  },
 
 	/* QUALCOMM BTS */
 	{ "qualcomm",   0x0000, 0x0000, HCI_UART_H4,   115200, 115200,
 			FLOW_CTL, DISABLE_PM, NULL, qualcomm, NULL },
+
+	/* Intel Bluetooth Module */
+	{ "intel",      0x0000, 0x0000, HCI_UART_H4,   115200, 115200,
+			FLOW_CTL, DISABLE_PM, NULL, intel, NULL },
+
+	/* Three-wire UART */
+	{ "3wire",      0x0000, 0x0000, HCI_UART_3WIRE, 115200, 115200,
+			0, DISABLE_PM, NULL, NULL, NULL },
+
+	/* AMP controller UART */
+	{ "amp",	0x0000, 0x0000, HCI_UART_H4, 115200, 115200,
+			AMP_DEV, DISABLE_PM, NULL, NULL, NULL },
 
 	{ NULL, 0 }
 };
@@ -1169,6 +1195,9 @@ static int init_uart(char *dev, struct uart_t *u, int send_break, int raw)
 
 	if (raw)
 		flags |= 1 << HCI_UART_RAW_DEVICE;
+
+	if (u->flags & AMP_DEV)
+		flags |= 1 << HCI_UART_CREATE_AMP;
 
 	fd = open(dev, O_RDWR | O_NOCTTY);
 	if (fd < 0) {

@@ -12,13 +12,6 @@ libbluetooth.so.3 libbluetooth3 #MINVER#
  bt_error@Base 4.91
  bt_free@Base 4.91
  bt_malloc@Base 4.91
- bt_string_to_uuid@Base 4.91
- bt_uuid128_create@Base 4.91
- bt_uuid16_create@Base 4.91
- bt_uuid32_create@Base 4.91
- bt_uuid_cmp@Base 4.91
- bt_uuid_to_string@Base 4.91
- bt_uuid_to_uuid128@Base 4.91
  hci_authenticate_link@Base 4.91
  hci_bustostr@Base 4.91
  hci_change_link_key@Base 4.91
@@ -112,6 +105,9 @@ libbluetooth.so.3 libbluetooth3 #MINVER#
  lmp_featurestostr@Base 4.91
  lmp_strtover@Base 4.91
  lmp_vertostr@Base 4.91
+ pal_strtover@Base 5.10
+ pal_vertostr@Base 5.10
+ sdp_add_lang_attr@Base 4.101
  sdp_append_to_buf@Base 4.91
  sdp_append_to_pdu@Base 4.91
  sdp_attr_add@Base 4.91
@@ -213,3 +209,5 @@ libbluetooth.so.3 libbluetooth3 #MINVER#
  sdp_uuid_to_uuid128@Base 4.91
  str2ba@Base 4.91
  strtoba@Base 4.91
+sixaxis.so libbluetooth3 #MINVER#
+ bluetooth_plugin_desc@Base 5.20

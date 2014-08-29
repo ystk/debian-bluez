@@ -28,12 +28,10 @@
 #include <config.h>
 #endif
 
-#include <stdio.h>
 #include <errno.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <sys/stat.h>
-#include <sys/socket.h>
 
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/l2cap.h>
@@ -41,7 +39,6 @@
 #include <bluetooth/sdp_lib.h>
 
 #include <sys/un.h>
-#include <netinet/in.h>
 
 #include <glib.h>
 
@@ -146,7 +143,7 @@ static int init_server(uint16_t mtu, int master, int compat)
 		return -1;
 	}
 
-	chmod(SDP_UNIX_PATH, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH);
+	chmod(SDP_UNIX_PATH, S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP);
 
 	return 0;
 }
@@ -168,7 +165,7 @@ static gboolean io_session_event(GIOChannel *chan, GIOCondition cond, gpointer d
 	}
 
 	len = recv(sk, &hdr, sizeof(sdp_pdu_hdr_t), MSG_PEEK);
-	if (len <= 0) {
+	if (len != sizeof(sdp_pdu_hdr_t)) {
 		sdp_svcdb_collect_all(sk);
 		return FALSE;
 	}
@@ -179,6 +176,10 @@ static gboolean io_session_event(GIOChannel *chan, GIOCondition cond, gpointer d
 		return TRUE;
 
 	len = recv(sk, buf, size, 0);
+	/* Check here only that the received message is not empty.
+	 * Incorrect length of message should be processed later
+	 * inside handle_request() in order to produce ErrorResponse.
+	 */
 	if (len <= 0) {
 		sdp_svcdb_collect_all(sk);
 		free(buf);
@@ -227,7 +228,7 @@ static gboolean io_accept_event(GIOChannel *chan, GIOCondition cond, gpointer da
 	return TRUE;
 }
 
-int start_sdp_server(uint16_t mtu, const char *did, uint32_t flags)
+int start_sdp_server(uint16_t mtu, uint32_t flags)
 {
 	int compat = flags & SDP_SERVER_COMPAT;
 	int master = flags & SDP_SERVER_MASTER;
@@ -238,21 +239,6 @@ int start_sdp_server(uint16_t mtu, const char *did, uint32_t flags)
 	if (init_server(mtu, master, compat) < 0) {
 		error("Server initialization failed");
 		return -1;
-	}
-
-	if (did && strlen(did) > 0) {
-		const char *ptr = did;
-		uint16_t vid = 0x0000, pid = 0x0000, ver = 0x0000;
-
-		vid = (uint16_t) strtol(ptr, NULL, 16);
-		ptr = strchr(ptr, ':');
-		if (ptr) {
-			pid = (uint16_t) strtol(ptr + 1, NULL, 16);
-			ptr = strchr(ptr + 1, ':');
-			if (ptr)
-				ver = (uint16_t) strtol(ptr + 1, NULL, 16);
-			register_device_id(vid, pid, ver);
-		}
 	}
 
 	io = g_io_channel_unix_new(l2cap_sock);

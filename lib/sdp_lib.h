@@ -81,6 +81,7 @@ static inline void sdp_list_foreach(sdp_list_t *list, sdp_list_func_t f, void *u
 #define SDP_RETRY_IF_BUSY	0x01
 #define SDP_WAIT_ON_CLOSE	0x02
 #define SDP_NON_BLOCKING	0x04
+#define SDP_LARGE_MTU		0x08
 
 /*
  * a session with an SDP server
@@ -623,6 +624,8 @@ void sdp_pattern_add_uuid(sdp_record_t *rec, uuid_t *uuid);
 void sdp_pattern_add_uuidseq(sdp_record_t *rec, sdp_list_t *seq);
 
 int sdp_send_req_w4_rsp(sdp_session_t *session, uint8_t *req, uint8_t *rsp, uint32_t reqsize, uint32_t *rspsize);
+
+void sdp_add_lang_attr(sdp_record_t *rec);
 
 #ifdef __cplusplus
 }

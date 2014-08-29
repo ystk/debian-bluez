@@ -44,6 +44,17 @@ void info(const char *format, ...)
 	va_end(ap);
 }
 
+void warn(const char *format, ...)
+{
+	va_list ap;
+
+	va_start(ap, format);
+
+	vsyslog(LOG_WARNING, format, ap);
+
+	va_end(ap);
+}
+
 void error(const char *format, ...)
 {
 	va_list ap;
@@ -69,7 +80,7 @@ void btd_debug(const char *format, ...)
 extern struct btd_debug_desc __start___debug[];
 extern struct btd_debug_desc __stop___debug[];
 
-static gchar **enabled = NULL;
+static char **enabled = NULL;
 
 static gboolean is_enabled(struct btd_debug_desc *desc)
 {

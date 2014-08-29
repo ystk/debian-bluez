@@ -1,3 +1,158 @@
+bluez (5.21-3) unstable; urgency=medium
+
+  * Remove old conf files. (Closes: #737502, #756890)
+  * Remove rfcomm support from init script. (Closes: #754830)
+
+ -- Nobuhiro Iwamatsu <iwamatsu@debian.org>  Sat, 09 Aug 2014 03:48:22 +0900
+
+bluez (5.21-2) unstable; urgency=medium
+
+  * Fix FTBFS with C99. (Closes: #755345)
+    Add patches/fix_ftbfs_with_c99.patch.
+  * Add support user session of obexd. (Closes: #754675)
+    Add patches/0001-obex-Use-GLib-helper-function-to-manipulate-paths.patch
+    and patches/0001-Allow-using-obexd-without-systemd-in-the-user-sessio.patch.
+  * Update bluez.bluetooth.init. (Closes: #754830, #712386, #737502)
+    Remove -f option of rfcomm.
+  * Move hciconfig from /usr to /bin.
+  * Update path of hciconfig in 50-bluetooth-hci-auto-poweron.rules.
+    (Closes: #755274)
+
+ -- Nobuhiro Iwamatsu <iwamatsu@debian.org>  Tue, 22 Jul 2014 09:25:12 +0900
+
+bluez (5.21-1) unstable; urgency=medium
+
+  * Upload to unstable.
+  * Update README.Debian.
+
+ -- Nobuhiro Iwamatsu <iwamatsu@debian.org>  Mon, 14 Jul 2014 08:21:17 +0900
+
+bluez (5.21-1~exp0) experimental; urgency=medium
+
+  * New upstream release. Update to 5.21.
+  * Remove version from obexd-server and obexd-client.
+
+ -- Nobuhiro Iwamatsu <iwamatsu@debian.org>  Tue, 08 Jul 2014 07:34:03 +0900
+
+bluez (5.20-1~exp0) experimental; urgency=medium
+
+  * New upstream release. Update to 5.20.
+  * Update debian/bluez.bluetooth.init
+    Remove function to start hci device at startup in sysvinit.
+  * Add 50-bluetooth-hci-auto-poweron.rules.
+    This supports start hci device at startup.
+  * Update libbluetooth3.symbols.
+  * Add patches/bluetooth.conf.patch.
+    This add permission of bluetooth control to user into bluetooth group.
+
+ -- Nobuhiro Iwamatsu <iwamatsu@debian.org>  Wed, 02 Jul 2014 11:22:04 +0900
+
+bluez (5.19-1~exp0) experimental; urgency=medium
+
+  * New upstream release. Update to 5.19.
+  * Move bluetoothd daemon and obexd to /usr/lib/bluetooth/. (Closes: #749283)
+    - Change bluez-obexd.install and bluez.install.
+    - Add --libexec to CONFIGURE_FLAGS in rules.
+    - Move bluez.links.in to bluez.links, and remove DEB_HOST_MULTIARCH.
+    - Remove sed function from override_dh_auto_configure target in rules.
+  * Fix FTBFS on ppc64el. (Closes: 745628)
+    - Add dh-autoreconf to Build-Depends.
+    - Enable autoreconf addon for dh.
+  * Install sixaxis plugin.
+    - Add path of sixaxis plugin to libbluetooth3.install and
+      libbluetooth-dev.install.
+
+ -- Nobuhiro Iwamatsu <iwamatsu@debian.org>  Wed, 25 Jun 2014 01:58:30 +0900
+
+bluez (5.17-1~exp0) experimental; urgency=medium
+
+  * New upstream release. Update to 5.17. (Closes: #732453)
+  * debian/rules.
+    - Add '--with systemd' to dh option.
+    - Enable threads and sixaxis support at configure.
+    - Update override_dh_installinit in debian/rules.
+    - Add override_dh_systemd_enable and override_dh_systemd_start.
+      target in debian/rules.
+    - Remove old configure.
+    - Add --enable-experimental to option of confiugre. (Closes: #712385)
+    - Install gatttool (Closes: #720486)
+  * debian/bluez.bluetooth.init
+    Add function to start hci device at startup in sysvinit
+  * debian/control
+    - Add dh-systemd (>= 1.5) to Build-Depends.
+    - Update Standards-Version to 3.9.5.
+    - Remove quilt from Build-Depends.
+    - Remove libusb-dev from Build-Depends.
+    - Update libglib2.0-dev to 2.28.
+    - Update Vcs-Svn and Vcs-Browser field.
+  * Update libbluetooth3.symbols.
+  * Add 0001-work-around-Logitech-diNovo-Edge-keyboard-firmware-i.patch
+
+ -- Nobuhiro Iwamatsu <iwamatsu@debian.org>  Tue, 08 Apr 2014 10:00:50 +0900
+
+bluez (5.5-1~exp1) experimental; urgency=low
+
+  * Fix install path of bluetoothd.
+
+ -- Nobuhiro Iwamatsu <iwamatsu@debian.org>  Tue, 21 May 2013 14:11:46 +0900
+
+bluez (5.5-1~exp0) experimental; urgency=low
+
+  * New upstream release. Update to 5.5. (Closes: #705519, #690749, #706986)
+  * Remove unnecessary patches.
+    - patches/01_lower_sink_ranking.patch
+    - patches/02_disable_hal.patch
+    - patches/06-alsalib.patch
+    - patches/07-fix-639356.patch
+    - patches/08-0001-systemd-install-systemd-unit-files.patch
+  * Update debian/control.
+    - Update Standards-Version to 3.9.4.
+    - Update version of debhelper to 9.
+    - Add bluez-hcidump, bluez-obexd and bluez-test-scripts packages.
+      (Closes: #690120)
+    - Remove bluez-utils, bluez-compat, bluez-alsa, bluez-audio,
+      bluez-pcmcia-support and bluez-gstreamer packages.
+    - Add udev, systemd and libical-dev to Build-Depends.
+    - Remove libnl-dev from Build-Depends. (Closes: #688160)
+    - Remove libsndfile1-dev from Build-Depends.
+    - Remove libasound2-dev from Build-Depends.
+    - Remove bluez-alsa from Recommends of bluetooth.
+    - Downgrade bluez-cups and bluez-obexd to Suggests. (Closes: #702081)
+    - Add ${misc:Depends} to Depends of bluetooth package. (Closes: #692550)
+    - Remove ${python:Depends} from Depends of bluez.
+    - Remove python-gi and python-dbus from Depends of bluez.
+      (Closes: #697752)
+  * Move api document from bluez to libbluetooth-dev.
+  * Update watch file
+  * Remove unnecessary manpages.
+    - bluetooth-agent.1, bluez-simple-agent.1 and hcitrace.1.
+  * Add manpage of bluetoothctl and btmon.
+  * Remove bluez.lintian-overrides and bluez_agent.udev.
+  * Update debian/rules.
+    - Convert from CDBS to dh, and cleanup.
+    - Add --enable-pie to configure option.
+    - Remove --enable-test from configure.
+  * Add man for btmon and update bluez.manpages
+  * Update libbluetooth3.symbols
+  * Add bluez.links
+  * Update compat to 9.
+  * Update README.examples. (Closes: #673191)
+  * Update bluez.bluetooth.init.
+    bluetoothd needs --background option of start-stop-daemon.
+
+ -- Nobuhiro Iwamatsu <iwamatsu@debian.org>  Sun, 19 May 2013 04:05:46 +0900
+
+bluez (4.101-1) experimental; urgency=low
+
+  * New upstream release. Update to 4.101.
+  * Update patches.
+    - patches/01_lower_sink_ranking.patch
+    - patches/03-Fix-return-code-of-hid2hci.patch
+  * Update debian/bluez.install.
+    Remove line for lib/udev/rules.d/97-bluetooth.rules.
+
+ -- Nobuhiro Iwamatsu <iwamatsu@debian.org>  Mon, 23 Jul 2012 09:15:52 +0900
+
 bluez (4.99-2) unstable; urgency=low
 
   * Update debian/control.
