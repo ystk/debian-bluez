@@ -45,6 +45,7 @@
 #define MGMT_STATUS_NOT_POWERED		0x0f
 #define MGMT_STATUS_CANCELLED		0x10
 #define MGMT_STATUS_INVALID_INDEX	0x11
+#define MGMT_STATUS_RFKILLED		0x12
 
 struct mgmt_hdr {
 	uint16_t opcode;
@@ -52,11 +53,6 @@ struct mgmt_hdr {
 	uint16_t len;
 } __packed;
 #define MGMT_HDR_SIZE	6
-
-#define MGMT_ADDR_BREDR			0x00
-#define MGMT_ADDR_LE_PUBLIC		0x01
-#define MGMT_ADDR_LE_RANDOM		0x02
-#define MGMT_ADDR_INVALID		0xff
 
 struct mgmt_addr_info {
 	bdaddr_t bdaddr;
@@ -84,7 +80,7 @@ struct mgmt_rp_read_index_list {
 
 /* Reserve one extra byte for names in management messages so that they
  * are always guaranteed to be nul-terminated */
-#define MGMT_MAX_NAME_LENGTH		(HCI_MAX_NAME_LENGTH + 1)
+#define MGMT_MAX_NAME_LENGTH		(248 + 1)
 #define MGMT_MAX_SHORT_NAME_LENGTH	(10 + 1)
 
 #define MGMT_SETTING_POWERED		0x00000001
@@ -97,6 +93,11 @@ struct mgmt_rp_read_index_list {
 #define MGMT_SETTING_BREDR		0x00000080
 #define MGMT_SETTING_HS			0x00000100
 #define MGMT_SETTING_LE			0x00000200
+#define MGMT_SETTING_ADVERTISING	0x00000400
+#define MGMT_SETTING_SECURE_CONN	0x00000800
+#define MGMT_SETTING_DEBUG_KEYS		0x00001000
+#define MGMT_SETTING_PRIVACY		0x00002000
+#define MGMT_SETTING_CONFIGURATION	0x00004000
 
 #define MGMT_OP_READ_INFO		0x0004
 struct mgmt_rp_read_info {
@@ -112,6 +113,10 @@ struct mgmt_rp_read_info {
 
 struct mgmt_mode {
 	uint8_t val;
+} __packed;
+
+struct mgmt_cod {
+	uint8_t val[3];
 } __packed;
 
 #define MGMT_OP_SET_POWERED		0x0005
@@ -175,11 +180,11 @@ struct mgmt_cp_load_link_keys {
 
 struct mgmt_ltk_info {
 	struct mgmt_addr_info addr;
-	uint8_t authenticated;
+	uint8_t type;
 	uint8_t master;
 	uint8_t enc_size;
 	uint16_t ediv;
-	uint8_t rand[8];
+	uint64_t rand;
 	uint8_t val[16];
 } __packed;
 
@@ -269,6 +274,12 @@ struct mgmt_rp_read_local_oob_data {
 	uint8_t hash[16];
 	uint8_t randomizer[16];
 } __packed;
+struct mgmt_rp_read_local_oob_ext_data {
+	uint8_t hash192[16];
+	uint8_t randomizer192[16];
+	uint8_t hash256[16];
+	uint8_t randomizer256[16];
+} __packed;
 
 #define MGMT_OP_ADD_REMOTE_OOB_DATA	0x0021
 struct mgmt_cp_add_remote_oob_data {
@@ -309,6 +320,129 @@ struct mgmt_cp_block_device {
 #define MGMT_OP_UNBLOCK_DEVICE		0x0027
 struct mgmt_cp_unblock_device {
 	struct mgmt_addr_info addr;
+} __packed;
+
+#define MGMT_OP_SET_DEVICE_ID		0x0028
+struct mgmt_cp_set_device_id {
+	uint16_t source;
+	uint16_t vendor;
+	uint16_t product;
+	uint16_t version;
+} __packed;
+
+#define MGMT_OP_SET_ADVERTISING		0x0029
+
+#define MGMT_OP_SET_BREDR		0x002A
+
+#define MGMT_OP_SET_STATIC_ADDRESS	0x002B
+struct mgmt_cp_set_static_address {
+	bdaddr_t bdaddr;
+} __packed;
+
+#define MGMT_OP_SET_SCAN_PARAMS		0x002C
+struct mgmt_cp_set_scan_params {
+	uint16_t interval;
+	uint16_t window;
+} __packed;
+
+#define MGMT_OP_SET_SECURE_CONN		0x002D
+
+#define MGMT_OP_SET_DEBUG_KEYS		0x002E
+
+struct mgmt_irk_info {
+	struct mgmt_addr_info addr;
+	uint8_t val[16];
+} __packed;
+
+#define MGMT_OP_SET_PRIVACY		0x002F
+struct mgmt_cp_set_privacy {
+	uint8_t privacy;
+	uint8_t irk[16];
+} __packed;
+
+#define MGMT_OP_LOAD_IRKS		0x0030
+struct mgmt_cp_load_irks {
+	uint16_t irk_count;
+	struct mgmt_irk_info irks[0];
+} __packed;
+
+#define MGMT_OP_GET_CONN_INFO		0x0031
+struct mgmt_cp_get_conn_info {
+	struct mgmt_addr_info addr;
+} __packed;
+struct mgmt_rp_get_conn_info {
+	struct mgmt_addr_info addr;
+	int8_t rssi;
+	int8_t tx_power;
+	int8_t max_tx_power;
+} __packed;
+
+#define MGMT_OP_GET_CLOCK_INFO		0x0032
+struct mgmt_cp_get_clock_info {
+	struct mgmt_addr_info addr;
+} __packed;
+struct mgmt_rp_get_clock_info {
+	struct mgmt_addr_info addr;
+	uint32_t  local_clock;
+	uint32_t  piconet_clock;
+	uint16_t  accuracy;
+} __packed;
+
+#define MGMT_OP_ADD_DEVICE		0x0033
+struct mgmt_cp_add_device {
+	struct mgmt_addr_info addr;
+	uint8_t action;
+} __packed;
+struct mgmt_rp_add_device {
+	struct mgmt_addr_info addr;
+} __packed;
+
+#define MGMT_OP_REMOVE_DEVICE		0x0034
+struct mgmt_cp_remove_device {
+	struct mgmt_addr_info addr;
+} __packed;
+struct mgmt_rp_remove_device {
+	struct mgmt_addr_info addr;
+} __packed;
+
+struct mgmt_conn_param {
+	struct mgmt_addr_info addr;
+	uint16_t min_interval;
+	uint16_t max_interval;
+	uint16_t latency;
+	uint16_t timeout;
+} __packed;
+
+#define MGMT_OP_LOAD_CONN_PARAM		0x0035
+struct mgmt_cp_load_conn_param {
+	uint16_t param_count;
+	struct mgmt_conn_param params[0];
+} __packed;
+
+#define MGMT_OP_READ_UNCONF_INDEX_LIST	0x0036
+struct mgmt_rp_read_unconf_index_list {
+	uint16_t num_controllers;
+	uint16_t index[0];
+} __packed;
+
+#define MGMT_OPTION_EXTERNAL_CONFIG	0x00000001
+#define MGMT_OPTION_PUBLIC_ADDRESS	0x00000002
+
+#define MGMT_OP_READ_CONFIG_INFO	0x0037
+struct mgmt_rp_read_config_info {
+	uint16_t manufacturer;
+	uint32_t supported_options;
+	uint32_t missing_options;
+} __packed;
+
+#define MGMT_OP_SET_EXTERNAL_CONFIG	0x0038
+struct mgmt_cp_set_external_config {
+	uint8_t config;
+} __packed;
+
+#define MGMT_OP_SET_PUBLIC_ADDRESS	0x0039
+struct mgmt_cp_set_public_address {
+	bdaddr_t bdaddr;
 } __packed;
 
 #define MGMT_EV_CMD_COMPLETE		0x0001
@@ -366,9 +500,15 @@ struct mgmt_ev_device_connected {
 	uint8_t eir[0];
 } __packed;
 
+#define MGMT_DEV_DISCONN_UNKNOWN	0x00
+#define MGMT_DEV_DISCONN_TIMEOUT	0x01
+#define MGMT_DEV_DISCONN_LOCAL_HOST	0x02
+#define MGMT_DEV_DISCONN_REMOTE		0x03
+
 #define MGMT_EV_DEVICE_DISCONNECTED	0x000C
 struct mgmt_ev_device_disconnected {
 	struct mgmt_addr_info addr;
+	uint8_t reason;
 } __packed;
 
 #define MGMT_EV_CONNECT_FAILED		0x000D
@@ -403,6 +543,7 @@ struct mgmt_ev_auth_failed {
 
 #define MGMT_DEV_FOUND_CONFIRM_NAME	0x01
 #define MGMT_DEV_FOUND_LEGACY_PAIRING	0x02
+#define MGMT_DEV_FOUND_NOT_CONNECTABLE	0x04
 
 #define MGMT_EV_DEVICE_FOUND		0x0012
 struct mgmt_ev_device_found {
@@ -433,6 +574,59 @@ struct mgmt_ev_device_unblocked {
 struct mgmt_ev_device_unpaired {
 	struct mgmt_addr_info addr;
 } __packed;
+
+#define MGMT_EV_PASSKEY_NOTIFY		0x0017
+struct mgmt_ev_passkey_notify {
+	struct mgmt_addr_info addr;
+	uint32_t passkey;
+	uint8_t entered;
+} __packed;
+
+#define MGMT_EV_NEW_IRK			0x0018
+struct mgmt_ev_new_irk {
+	uint8_t  store_hint;
+	bdaddr_t rpa;
+	struct mgmt_irk_info key;
+} __packed;
+
+struct mgmt_csrk_info {
+	struct mgmt_addr_info addr;
+	uint8_t master;
+	uint8_t val[16];
+} __packed;
+
+#define MGMT_EV_NEW_CSRK		0x0019
+struct mgmt_ev_new_csrk {
+	uint8_t store_hint;
+	struct mgmt_csrk_info key;
+} __packed;
+
+#define MGMT_EV_DEVICE_ADDED		0x001a
+struct mgmt_ev_device_added {
+	struct mgmt_addr_info addr;
+	uint8_t action;
+} __packed;
+
+#define MGMT_EV_DEVICE_REMOVED		0x001b
+struct mgmt_ev_device_removed {
+	struct mgmt_addr_info addr;
+} __packed;
+
+#define MGMT_EV_NEW_CONN_PARAM		0x001c
+struct mgmt_ev_new_conn_param {
+	struct mgmt_addr_info addr;
+	uint8_t store_hint;
+	uint16_t min_interval;
+	uint16_t max_interval;
+	uint16_t latency;
+	uint16_t timeout;
+} __packed;
+
+#define MGMT_EV_UNCONF_INDEX_ADDED	0x001d
+
+#define MGMT_EV_UNCONF_INDEX_REMOVED	0x001e
+
+#define MGMT_EV_NEW_CONFIG_OPTIONS	0x001f
 
 static const char *mgmt_op[] = {
 	"<0x0000>",
@@ -475,6 +669,24 @@ static const char *mgmt_op[] = {
 	"Confirm Name",
 	"Block Device",
 	"Unblock Device",
+	"Set Device ID",
+	"Set Advertising",
+	"Set BR/EDR",
+	"Set Static Address",
+	"Set Scan Parameters",
+	"Set Secure Connections",
+	"Set Debug Keys",
+	"Set Privacy",
+	"Load Identity Resolving Keys",
+	"Get Connection Information",
+	"Get Clock Information",
+	"Add Device",
+	"Remove Device",
+	"Load Connection Parameters",
+	"Read Unconfigured Index List",
+	"Read Controller Configuration Information",
+	"Set External Configuration",
+	"Set Public Address",
 };
 
 static const char *mgmt_ev[] = {
@@ -501,6 +713,15 @@ static const char *mgmt_ev[] = {
 	"Device Blocked",
 	"Device Unblocked",
 	"Device Unpaired",
+	"Passkey Notify",
+	"New Identity Resolving Key",
+	"New Signature Resolving Key",
+	"Device Added",
+	"Device Removed",
+	"New Connection Parameter",
+	"Unconfigured Index Added",
+	"Unconfigured Index Removed",
+	"New Configuration Options",
 };
 
 static const char *mgmt_status[] = {
@@ -522,6 +743,7 @@ static const char *mgmt_status[] = {
 	"Not Powered",
 	"Cancelled",
 	"Invalid Index",
+	"Blocked through rfkill",
 };
 
 #ifndef NELEM

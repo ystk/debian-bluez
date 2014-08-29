@@ -649,6 +649,7 @@ static hci_map ver_map[] = {
 	{ "2.1",	0x04 },
 	{ "3.0",	0x05 },
 	{ "4.0",	0x06 },
+	{ "4.1",	0x07 },
 	{ NULL }
 };
 
@@ -670,6 +671,21 @@ char *lmp_vertostr(unsigned int ver)
 int lmp_strtover(char *str, unsigned int *ver)
 {
 	return hci_str2uint(ver_map, str, ver);
+}
+
+static hci_map pal_map[] = {
+	{ "3.0",	0x01 },
+	{ NULL }
+};
+
+char *pal_vertostr(unsigned int ver)
+{
+	return hci_uint2str(pal_map, ver);
+}
+
+int pal_strtover(char *str, unsigned int *ver)
+{
+	return hci_str2uint(pal_map, str, ver);
 }
 
 /* LMP features mapping */
@@ -817,7 +833,7 @@ int hci_for_each_dev(int flag, int (*func)(int dd, int dev_id, long arg),
 	int dev_id = -1;
 	int i, sk, err = 0;
 
-	sk = socket(AF_BLUETOOTH, SOCK_RAW, BTPROTO_HCI);
+	sk = socket(AF_BLUETOOTH, SOCK_RAW | SOCK_CLOEXEC, BTPROTO_HCI);
 	if (sk < 0)
 		return -1;
 
@@ -909,7 +925,7 @@ int hci_devinfo(int dev_id, struct hci_dev_info *di)
 {
 	int dd, err, ret;
 
-	dd = socket(AF_BLUETOOTH, SOCK_RAW, BTPROTO_HCI);
+	dd = socket(AF_BLUETOOTH, SOCK_RAW | SOCK_CLOEXEC, BTPROTO_HCI);
 	if (dd < 0)
 		return dd;
 
@@ -965,7 +981,7 @@ int hci_inquiry(int dev_id, int len, int nrsp, const uint8_t *lap,
 		}
 	}
 
-	dd = socket(AF_BLUETOOTH, SOCK_RAW, BTPROTO_HCI);
+	dd = socket(AF_BLUETOOTH, SOCK_RAW | SOCK_CLOEXEC, BTPROTO_HCI);
 	if (dd < 0)
 		return dd;
 
@@ -1021,7 +1037,7 @@ int hci_open_dev(int dev_id)
 	int dd, err;
 
 	/* Create HCI socket */
-	dd = socket(AF_BLUETOOTH, SOCK_RAW, BTPROTO_HCI);
+	dd = socket(AF_BLUETOOTH, SOCK_RAW | SOCK_CLOEXEC, BTPROTO_HCI);
 	if (dd < 0)
 		return dd;
 
@@ -2829,7 +2845,7 @@ int hci_le_set_advertise_enable(int dd, uint8_t enable, int to)
 int hci_le_create_conn(int dd, uint16_t interval, uint16_t window,
 		uint8_t initiator_filter, uint8_t peer_bdaddr_type,
 		bdaddr_t peer_bdaddr, uint8_t own_bdaddr_type,
-		uint16_t min_interval, 	uint16_t max_interval,
+		uint16_t min_interval, uint16_t max_interval,
 		uint16_t latency, uint16_t supervision_timeout,
 		uint16_t min_ce_length, uint16_t max_ce_length,
 		uint16_t *handle, int to)
