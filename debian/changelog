@@ -1,3 +1,11 @@
+bluez (5.23-2+deb8u1) jessie-security; urgency=high
+
+  * Non-maintainer upload by the Security Team.
+  * CVE-2017-1000250: information disclosure vulnerability in
+    service_search_attr_req (Closes: #875633)
+
+ -- Salvatore Bonaccorso <carnil@debian.org>  Wed, 13 Sep 2017 09:43:03 +0200
+
 bluez (5.23-2) unstable; urgency=medium
 
   * debian/control.
