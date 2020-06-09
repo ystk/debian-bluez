@@ -35,11 +35,12 @@
 #include <sys/stat.h>
 
 #include <glib.h>
-#include <gdbus/gdbus.h>
-#include <gobex/gobex.h>
 
+#include "gdbus/gdbus.h"
+#include "gobex/gobex.h"
+
+#include "obexd/src/log.h"
 #include "dbus.h"
-#include "log.h"
 #include "transfer.h"
 #include "session.h"
 #include "driver.h"
@@ -61,6 +62,7 @@ static guint64 counter = 0;
 
 struct callback_data {
 	struct obc_session *session;
+	guint id;
 	session_callback_t func;
 	void *data;
 };
@@ -111,6 +113,7 @@ struct obc_session {
 	GQueue *queue;
 	guint process_id;
 	char *folder;
+	struct callback_data *callback;
 };
 
 static GSList *sessions = NULL;
@@ -302,12 +305,27 @@ disconnect:
 	session_free(session);
 }
 
+static void callback_destroy(struct callback_data *callback, GError *err)
+{
+	struct obc_session *session = callback->session;
+
+	if (callback->id > 0)
+		g_obex_cancel_req(session->obex, callback->id, TRUE);
+
+	callback->func(session, NULL, err, callback->data);
+	g_free(callback);
+	session->callback = NULL;
+	obc_session_unref(session);
+}
+
 static void connect_cb(GObex *obex, GError *err, GObexPacket *rsp,
 							gpointer user_data)
 {
 	struct callback_data *callback = user_data;
 	GError *gerr = NULL;
 	uint8_t rsp_code;
+
+	callback->id = 0;
 
 	if (err != NULL) {
 		error("connect_cb: %s", err->message);
@@ -321,11 +339,9 @@ static void connect_cb(GObex *obex, GError *err, GObexPacket *rsp,
 				"OBEX Connect failed with 0x%02x", rsp_code);
 
 done:
-	callback->func(callback->session, NULL, gerr, callback->data);
+	callback_destroy(callback, gerr);
 	if (gerr != NULL)
 		g_error_free(gerr);
-	obc_session_unref(callback->session);
-	g_free(callback);
 }
 
 static void session_disconnected(GObex *obex, GError *err, gpointer user_data)
@@ -345,6 +361,7 @@ static void transport_func(GIOChannel *io, GError *err, gpointer user_data)
 	struct obc_driver *driver = session->driver;
 	struct obc_transport *transport = session->transport;
 	GObex *obex;
+	GObexApparam *apparam;
 	GObexTransportType type;
 	int tx_mtu = -1;
 	int rx_mtu = -1;
@@ -370,13 +387,37 @@ static void transport_func(GIOChannel *io, GError *err, gpointer user_data)
 
 	g_io_channel_set_close_on_unref(io, TRUE);
 
-	if (driver->target != NULL)
-		g_obex_connect(obex, connect_cb, callback, &err,
+	apparam = NULL;
+
+	if (driver->supported_features)
+		apparam = driver->supported_features(session);
+
+	if (apparam) {
+		uint8_t buf[1024];
+		ssize_t len;
+
+		len = g_obex_apparam_encode(apparam, buf, sizeof(buf));
+		if (driver->target)
+			callback->id = g_obex_connect(obex, connect_cb,
+					callback, &err,
+					G_OBEX_HDR_TARGET,
+					driver->target, driver->target_len,
+					G_OBEX_HDR_APPARAM,
+					buf, len,
+					G_OBEX_HDR_INVALID);
+		else
+			callback->id = g_obex_connect(obex, connect_cb,
+					callback, &err,
+					G_OBEX_HDR_APPARAM, buf, len,
+					G_OBEX_HDR_INVALID);
+		g_obex_apparam_free(apparam);
+	} else if (driver->target)
+		callback->id = g_obex_connect(obex, connect_cb, callback, &err,
 			G_OBEX_HDR_TARGET, driver->target, driver->target_len,
 			G_OBEX_HDR_INVALID);
 	else
-		g_obex_connect(obex, connect_cb, callback, &err,
-							G_OBEX_HDR_INVALID);
+		callback->id = g_obex_connect(obex, connect_cb, callback,
+						&err, G_OBEX_HDR_INVALID);
 
 	if (err != NULL) {
 		error("%s", err->message);
@@ -391,16 +432,27 @@ static void transport_func(GIOChannel *io, GError *err, gpointer user_data)
 
 	return;
 done:
-	callback->func(callback->session, NULL, err, callback->data);
-	obc_session_unref(callback->session);
-	g_free(callback);
+	callback_destroy(callback, err);
 }
 
 static void owner_disconnected(DBusConnection *connection, void *user_data)
 {
 	struct obc_session *session = user_data;
+	GError *err;
 
 	DBG("");
+
+	/*
+	 * If connection still connecting notify the callback to destroy the
+	 * session.
+	 */
+	if (session->callback) {
+		err = g_error_new(OBEX_IO_ERROR, OBEX_IO_DISCONNECTED,
+						"Session closed by user");
+		callback_destroy(session->callback, err);
+		g_error_free(err);
+		return;
+	}
 
 	obc_session_shutdown(session);
 }
@@ -506,6 +558,8 @@ static int session_connect(struct obc_session *session,
 		g_free(callback);
 		return -EINVAL;
 	}
+
+	session->callback = callback;
 
 	return 0;
 }
@@ -1097,15 +1151,11 @@ static int session_process_setpath(struct pending_request *p, GError **err)
 
 	p->req_id = g_obex_setpath(p->session->obex, first, setpath_cb, p, err);
 	if (*err != NULL)
-		goto fail;
+		return (*err)->code;
 
 	p->session->p = p;
 
 	return 0;
-
-fail:
-	pending_request_free(p);
-	return (*err)->code;
 }
 
 guint obc_session_setpath(struct obc_session *session, const char *path,
@@ -1125,6 +1175,13 @@ guint obc_session_setpath(struct obc_session *session, const char *path,
 	data->func = func;
 	data->user_data = user_data;
 	data->remaining = g_strsplit(strlen(path) ? path : "/", "/", 0);
+
+	if (!data->remaining || !data->remaining[0]) {
+		error("obc_session_setpath: invalid path %s", path);
+		g_set_error(err, OBEX_IO_ERROR, -EINVAL, "Invalid argument");
+		setpath_data_free(data);
+		return 0;
+	}
 
 	p = pending_request_new(session, session_process_setpath, NULL,
 				setpath_op_complete, data, setpath_data_free);
@@ -1183,15 +1240,11 @@ static int session_process_mkdir(struct pending_request *p, GError **err)
 	p->req_id = g_obex_mkdir(p->session->obex, req->srcname, async_cb, p,
 									err);
 	if (*err != NULL)
-		goto fail;
+		return (*err)->code;
 
 	p->session->p = p;
 
 	return 0;
-
-fail:
-	pending_request_free(p);
-	return (*err)->code;
 }
 
 guint obc_session_mkdir(struct obc_session *session, const char *folder,
@@ -1225,15 +1278,11 @@ static int session_process_copy(struct pending_request *p, GError **err)
 	p->req_id = g_obex_copy(p->session->obex, req->srcname, req->destname,
 							async_cb, p, err);
 	if (*err != NULL)
-		goto fail;
+		return (*err)->code;
 
 	p->session->p = p;
 
 	return 0;
-
-fail:
-	pending_request_free(p);
-	return (*err)->code;
 }
 
 guint obc_session_copy(struct obc_session *session, const char *srcname,
@@ -1268,15 +1317,11 @@ static int session_process_move(struct pending_request *p, GError **err)
 	p->req_id = g_obex_move(p->session->obex, req->srcname, req->destname,
 							async_cb, p, err);
 	if (*err != NULL)
-		goto fail;
+		return (*err)->code;
 
 	p->session->p = p;
 
 	return 0;
-
-fail:
-	pending_request_free(p);
-	return (*err)->code;
 }
 
 guint obc_session_move(struct obc_session *session, const char *srcname,
@@ -1311,15 +1356,11 @@ static int session_process_delete(struct pending_request *p, GError **err)
 	p->req_id = g_obex_delete(p->session->obex, req->srcname, async_cb, p,
 									err);
 	if (*err != NULL)
-		goto fail;
+		return (*err)->code;
 
 	p->session->p = p;
 
 	return 0;
-
-fail:
-	pending_request_free(p);
-	return (*err)->code;
 }
 
 guint obc_session_delete(struct obc_session *session, const char *file,

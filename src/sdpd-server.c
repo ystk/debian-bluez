@@ -31,23 +31,22 @@
 #include <errno.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <stdbool.h>
 #include <sys/stat.h>
-
-#include <bluetooth/bluetooth.h>
-#include <bluetooth/l2cap.h>
-#include <bluetooth/sdp.h>
-#include <bluetooth/sdp_lib.h>
-
 #include <sys/un.h>
 
 #include <glib.h>
+
+#include "lib/bluetooth.h"
+#include "lib/l2cap.h"
+#include "lib/sdp.h"
+#include "lib/sdp_lib.h"
 
 #include "log.h"
 #include "sdpd.h"
 
 static guint l2cap_id = 0, unix_id = 0;
-
-static int l2cap_sock, unix_sock;
+static int l2cap_sock = -1, unix_sock = -1;
 
 /*
  * SDP server initialization on startup includes creating the
@@ -165,7 +164,7 @@ static gboolean io_session_event(GIOChannel *chan, GIOCondition cond, gpointer d
 	}
 
 	len = recv(sk, &hdr, sizeof(sdp_pdu_hdr_t), MSG_PEEK);
-	if (len != sizeof(sdp_pdu_hdr_t)) {
+	if (len < 0 || (unsigned int) len < sizeof(sdp_pdu_hdr_t)) {
 		sdp_svcdb_collect_all(sk);
 		return FALSE;
 	}

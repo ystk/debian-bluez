@@ -1,5 +1,5 @@
 AC_PREREQ(2.60)
-AC_INIT(bluez, 5.23)
+AC_INIT(bluez, 5.43)
 
 AM_INIT_AUTOMAKE([foreign subdir-objects color-tests silent-rules
 					tar-pax no-dist-gzip dist-xz])
@@ -32,6 +32,16 @@ m4_ifdef([AC_LIBTOOL_TAGS], [AC_LIBTOOL_TAGS([])])
 AC_DISABLE_STATIC
 AC_PROG_LIBTOOL
 
+if (test "$USE_MAINTAINER_MODE" = "yes"); then
+	AC_CHECK_PROG(enable_coverage, [lcov], [yes], [no])
+	AC_CHECK_PROG(enable_dbus_run_session, [dbus-run-session], [yes])
+	AC_CHECK_PROG(enable_valgrind, [valgrind], [yes])
+	AC_CHECK_HEADERS(valgrind/memcheck.h)
+fi
+AM_CONDITIONAL(COVERAGE, test "${enable_coverage}" = "yes")
+AM_CONDITIONAL(DBUS_RUN_SESSION, test "${enable_dbus_run_session}" = "yes")
+AM_CONDITIONAL(VALGRIND, test "${enable_valgrind}" = "yes")
+
 MISC_FLAGS
 
 AC_ARG_ENABLE(threads, AC_HELP_STRING([--enable-threads],
@@ -48,6 +58,8 @@ AC_CHECK_LIB(pthread, pthread_create, dummy=yes,
 
 AC_CHECK_LIB(dl, dlopen, dummy=yes,
 			AC_MSG_ERROR(dynamic linking loader is required))
+
+AC_CHECK_HEADERS(linux/types.h linux/if_alg.h)
 
 PKG_CHECK_MODULES(GLIB, glib-2.0 >= 2.28, dummy=yes,
 				AC_MSG_ERROR(GLib >= 2.28 is required))
@@ -105,6 +117,20 @@ if (test -z "${path_dbussessionbusdir}"); then
 	AC_MSG_RESULT([${path_dbussessionbusdir}])
 fi
 AC_SUBST(DBUS_SESSIONBUSDIR, [${path_dbussessionbusdir}])
+
+AC_ARG_ENABLE(backtrace, AC_HELP_STRING([--enable-backtrace],
+		[compile backtrace support]), [enable_backtrace=${enableval}])
+
+if (test "${enable_backtrace}" = "yes"); then
+	AC_CHECK_HEADER(elfutils/libdwfl.h, dummy=yes,
+			AC_MSG_ERROR(elfutils support is required))
+	AC_DEFINE(HAVE_BACKTRACE_SUPPORT, 1,
+			[Define to 1 if you have the backtrace support.])
+	BACKTRACE_CFLAGS=""
+	BACKTRACE_LIBS="-ldw"
+	AC_SUBST(BACKTRACE_CFLAGS)
+	AC_SUBST(BACKTRACE_LIBS)
+fi
 
 AC_ARG_ENABLE(library, AC_HELP_STRING([--enable-library],
 		[install Bluetooth library]), [enable_library=${enableval}])
@@ -220,6 +246,11 @@ AC_ARG_ENABLE(experimental, AC_HELP_STRING([--enable-experimental],
 			[enable experimental plugins (SAP, NFC, ...)]),
 					[enable_experimental=${enableval}])
 AM_CONDITIONAL(EXPERIMENTAL, test "${enable_experimental}" = "yes")
+
+AC_ARG_ENABLE(deprecated, AC_HELP_STRING([--enable-deprecated],
+			[enable deprecated plugins (BLE services, ...)]),
+					[enable_deprecated=${enableval}])
+AM_CONDITIONAL(DEPRECATED, test "${enable_deprecated}" = "yes")
 
 AC_ARG_ENABLE(sixaxis, AC_HELP_STRING([--enable-sixaxis],
 		[enable sixaxis plugin]), [enable_sixaxis=${enableval}])

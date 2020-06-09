@@ -33,12 +33,13 @@
 #include <sys/socket.h>
 #include <sys/ioctl.h>
 
-#include <bluetooth/bluetooth.h>
-#include <bluetooth/sdp.h>
-
 #include <glib.h>
 #include <dbus/dbus.h>
-#include <gdbus/gdbus.h>
+
+#include "lib/bluetooth.h"
+#include "lib/sdp.h"
+
+#include "gdbus/gdbus.h"
 
 #include "log.h"
 #include "error.h"
@@ -242,6 +243,10 @@ void agent_unref(struct agent *agent)
 			passkey_cb = agent->request->cb;
 			passkey_cb(agent, &err, 0, agent->request->user_data);
 			break;
+		case AGENT_REQUEST_CONFIRMATION:
+		case AGENT_REQUEST_AUTHORIZATION:
+		case AGENT_REQUEST_AUTHORIZE_SERVICE:
+		case AGENT_REQUEST_DISPLAY_PINCODE:
 		default:
 			cb = agent->request->cb;
 			cb(agent, &err, agent->request->user_data);
@@ -350,6 +355,7 @@ static void simple_agent_reply(DBusPendingCall *call, void *user_data)
 
 		if (dbus_error_has_name(&err, DBUS_ERROR_NO_REPLY)) {
 			error("Timed out waiting for reply from agent");
+			agent_cancel(agent);
 			dbus_message_unref(message);
 			dbus_error_free(&err);
 			agent_unref(agent);
@@ -918,7 +924,7 @@ static void agent_destroy(gpointer data)
 static uint8_t parse_io_capability(const char *capability)
 {
 	if (g_str_equal(capability, ""))
-		return IO_CAPABILITY_DISPLAYYESNO;
+		return IO_CAPABILITY_KEYBOARDDISPLAY;
 	if (g_str_equal(capability, "DisplayOnly"))
 		return IO_CAPABILITY_DISPLAYONLY;
 	if (g_str_equal(capability, "DisplayYesNo"))

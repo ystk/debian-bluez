@@ -34,9 +34,9 @@
 #include "lib/hci.h"
 #include "lib/hci_lib.h"
 
-#define LMP_U8(frm)  (get_u8(frm))
-#define LMP_U16(frm) (btohs(htons(get_u16(frm))))
-#define LMP_U32(frm) (btohl(htonl(get_u32(frm))))
+#define LMP_U8(frm)  (p_get_u8(frm))
+#define LMP_U16(frm) (btohs(htons(p_get_u16(frm))))
+#define LMP_U32(frm) (btohl(htonl(p_get_u32(frm))))
 
 static enum {
 	IN_RAND,
@@ -120,6 +120,11 @@ static inline void comb_key(struct frame *frm)
 		memcpy(pairing_data.comb_key_s, val, 16);
 		pairing_state = AU_RAND_M;
 		break;
+	case IN_RAND:
+	case AU_RAND_M:
+	case AU_RAND_S:
+	case SRES_M:
+	case SRES_S:
 	default:
 		pairing_state = IN_RAND;
 		break;
@@ -139,6 +144,11 @@ static inline void au_rand(struct frame *frm)
 		memcpy(pairing_data.au_rand_s, val, 16);
 		pairing_state = SRES_S;
 		break;
+	case COMB_KEY_M:
+	case COMB_KEY_S:
+	case IN_RAND:
+	case SRES_M:
+	case SRES_S:
 	default:
 		pairing_state = IN_RAND;
 		break;
@@ -159,6 +169,11 @@ static inline void sres(struct frame *frm)
 		pairing_state = IN_RAND;
 		pairing_data_dump();
 		break;
+	case COMB_KEY_M:
+	case COMB_KEY_S:
+	case IN_RAND:
+	case AU_RAND_M:
+	case AU_RAND_S:
 	default:
 		pairing_state = IN_RAND;
 		break;

@@ -30,10 +30,13 @@
 #include <stdlib.h>
 #include <getopt.h>
 #include <sys/socket.h>
+#include <unistd.h>
 
-#include <bluetooth/bluetooth.h>
-#include <bluetooth/hci.h>
-#include <bluetooth/hci_lib.h>
+#include "lib/bluetooth.h"
+#include "lib/hci.h"
+#include "lib/hci_lib.h"
+
+#include "src/shared/tty.h"
 
 #include "csr.h"
 
@@ -279,7 +282,6 @@ static int cmd_keylen(int transport, int argc, char *argv[])
 	if (err < 0)
 		return -1;
 
-	handle = array[0] | (array[1] << 8);
 	keylen = array[2] | (array[3] << 8);
 
 	printf("Crypt key length: %d bit\n", keylen * 8);
@@ -1041,6 +1043,47 @@ static int cmd_pscheck(int transport, int argc, char *argv[])
 	return 0;
 }
 
+static int cmd_adc(int transport, int argc, char *argv[])
+{
+	uint8_t array[8];
+	uint16_t mux, value;
+	int err;
+
+	OPT_HELP(1, NULL);
+
+	if (!strncasecmp(argv[0], "0x", 2))
+		mux = strtol(argv[0], NULL, 16);
+	else
+		mux = atoi(argv[0]);
+
+	/* Request an ADC read from a particular mux'ed input */
+	memset(array, 0, sizeof(array));
+	array[0] = mux & 0xff;
+	array[1] = mux >> 8;
+
+	err = transport_write(transport, CSR_VARID_ADC, array, 2);
+	if (err < 0) {
+		errno = -err;
+		return -1;
+	}
+
+	/* have to wait a short while, then read result */
+	usleep(50000);
+	err = transport_read(transport, CSR_VARID_ADC_RES, array, 8);
+	if (err < 0) {
+		errno = -err;
+		return -1;
+	}
+
+	mux = array[0] | (array[1] << 8);
+	value = array[4] | (array[5] << 8);
+
+	printf("ADC value from Mux 0x%02x : 0x%04x (%s)\n", mux, value,
+					array[2] == 1 ? "valid" : "invalid");
+
+	return 0;
+}
+
 static struct {
 	char *str;
 	int (*func)(int transport, int argc, char *argv[]);
@@ -1071,6 +1114,7 @@ static struct {
 	{ "psread",    cmd_psread,    NULL,                  "Read all PS keys"               },
 	{ "psload",    cmd_psload,    "<file>",              "Load all PS keys from PSR file" },
 	{ "pscheck",   cmd_pscheck,   "<file>",              "Check PSR file"                 },
+	{ "adc",       cmd_adc,       "<mux>",               "Read ADC value of <mux> input"  },
 	{ NULL }
 };
 
@@ -1151,34 +1195,8 @@ int main(int argc, char *argv[])
 			device = strdup(optarg);
 			break;
 		case 'b':
-			switch (atoi(optarg)) {
-			case 9600: bcsp_rate = B9600; break;
-			case 19200: bcsp_rate = B19200; break;
-			case 38400: bcsp_rate = B38400; break;
-			case 57600: bcsp_rate = B57600; break;
-			case 115200: bcsp_rate = B115200; break;
-			case 230400: bcsp_rate = B230400; break;
-			case 460800: bcsp_rate = B460800; break;
-			case 500000: bcsp_rate = B500000; break;
-			case 576000: bcsp_rate = B576000; break;
-			case 921600: bcsp_rate = B921600; break;
-			case 1000000: bcsp_rate = B1000000; break;
-			case 1152000: bcsp_rate = B1152000; break;
-			case 1500000: bcsp_rate = B1500000; break;
-			case 2000000: bcsp_rate = B2000000; break;
-#ifdef B2500000
-			case 2500000: bcsp_rate = B2500000; break;
-#endif
-#ifdef B3000000
-			case 3000000: bcsp_rate = B3000000; break;
-#endif
-#ifdef B3500000
-			case 3500000: bcsp_rate = B3500000; break;
-#endif
-#ifdef B4000000
-			case 4000000: bcsp_rate = B4000000; break;
-#endif
-			default:
+			bcsp_rate = tty_get_speed(atoi(optarg));
+			if (!bcsp_rate) {
 				printf("Unknown BCSP baud rate specified, defaulting to 38400bps\n");
 				bcsp_rate = B38400;
 			}

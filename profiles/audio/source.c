@@ -31,20 +31,21 @@
 #include <stdbool.h>
 #include <errno.h>
 
-#include <bluetooth/bluetooth.h>
-#include <bluetooth/sdp.h>
-
 #include <glib.h>
 #include <dbus/dbus.h>
-#include <gdbus/gdbus.h>
+
+#include "lib/bluetooth.h"
+#include "lib/sdp.h"
+
+#include "gdbus/gdbus.h"
 
 #include "src/log.h"
-
 #include "src/adapter.h"
 #include "src/device.h"
 #include "src/service.h"
 #include "src/error.h"
 #include "src/dbus-common.h"
+#include "src/shared/queue.h"
 
 #include "avdtp.h"
 #include "media.h"
@@ -176,8 +177,8 @@ static void stream_state_changed(struct avdtp_stream *stream,
 }
 
 static void stream_setup_complete(struct avdtp *session, struct a2dp_sep *sep,
-					struct avdtp_stream *stream,
-					struct avdtp_error *err, void *user_data)
+					struct avdtp_stream *stream, int err,
+					void *user_data)
 {
 	struct source *source = user_data;
 
@@ -188,11 +189,7 @@ static void stream_setup_complete(struct avdtp *session, struct a2dp_sep *sep,
 
 	avdtp_unref(source->session);
 	source->session = NULL;
-	if (avdtp_error_category(err) == AVDTP_ERRNO
-				&& avdtp_error_posix_errno(err) != EHOSTDOWN)
-		btd_service_connecting_complete(source->service, -EAGAIN);
-	else
-		btd_service_connecting_complete(source->service, -EIO);
+	btd_service_connecting_complete(source->service, err);
 }
 
 static void select_complete(struct avdtp *session, struct a2dp_sep *sep,
@@ -220,32 +217,26 @@ failed:
 	source->session = NULL;
 }
 
-static void discovery_complete(struct avdtp *session, GSList *seps, struct avdtp_error *err,
-				void *user_data)
+static void discovery_complete(struct avdtp *session, GSList *seps, int err,
+							void *user_data)
 {
 	struct source *source = user_data;
-	int id, perr;
+	int id;
+
+	source->connect_id = 0;
 
 	if (err) {
 		avdtp_unref(source->session);
 		source->session = NULL;
-
-		perr = -avdtp_error_posix_errno(err);
-		if (perr != -EHOSTDOWN) {
-			if (avdtp_error_category(err) == AVDTP_ERRNO)
-				perr = -EAGAIN;
-			else
-				perr = -EIO;
-		}
 		goto failed;
 	}
 
 	DBG("Discovery complete");
 
-	id = a2dp_select_capabilities(source->session, AVDTP_SEP_TYPE_SOURCE, NULL,
-						select_complete, source);
+	id = a2dp_select_capabilities(source->session, AVDTP_SEP_TYPE_SOURCE,
+					NULL, select_complete, source);
 	if (id == 0) {
-		perr = -EIO;
+		err = -EIO;
 		goto failed;
 	}
 
@@ -253,7 +244,7 @@ static void discovery_complete(struct avdtp *session, GSList *seps, struct avdtp
 	return;
 
 failed:
-	btd_service_connecting_complete(source->service, perr);
+	btd_service_connecting_complete(source->service, err);
 	avdtp_unref(source->session);
 	source->session = NULL;
 }
@@ -272,7 +263,9 @@ gboolean source_setup_stream(struct btd_service *service,
 	if (!source->session)
 		return FALSE;
 
-	if (avdtp_discover(source->session, discovery_complete, source) < 0)
+	source->connect_id = a2dp_discover(source->session, discovery_complete,
+								source);
+	if (source->connect_id == 0)
 		return FALSE;
 
 	return TRUE;
@@ -283,7 +276,7 @@ int source_connect(struct btd_service *service)
 	struct source *source = btd_service_get_user_data(service);
 
 	if (!source->session)
-		source->session = avdtp_get(btd_service_get_device(service));
+		source->session = a2dp_avdtp_get(btd_service_get_device(service));
 
 	if (!source->session) {
 		DBG("Unable to get a session");
@@ -291,6 +284,9 @@ int source_connect(struct btd_service *service)
 	}
 
 	if (source->connect_id > 0 || source->disconnect_id > 0)
+		return -EBUSY;
+
+	if (source->state == SOURCE_STATE_CONNECTING)
 		return -EBUSY;
 
 	if (source->stream_state >= AVDTP_STATE_OPEN)
@@ -392,12 +388,12 @@ int source_disconnect(struct btd_service *service)
 
 	/* cancel pending connect */
 	if (source->connect_id > 0) {
-		a2dp_cancel(source->connect_id);
-		source->connect_id = 0;
-		btd_service_connecting_complete(source->service, -ECANCELED);
-
 		avdtp_unref(source->session);
 		source->session = NULL;
+
+		a2dp_cancel(source->connect_id);
+		source->connect_id = 0;
+		btd_service_disconnecting_complete(source->service, 0);
 
 		return 0;
 	}

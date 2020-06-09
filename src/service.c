@@ -27,7 +27,6 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <assert.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <stdbool.h>
@@ -35,11 +34,13 @@
 #include <sys/ioctl.h>
 #include <errno.h>
 
-#include <bluetooth/bluetooth.h>
-
 #include <glib.h>
 
+#include "lib/bluetooth.h"
+#include "lib/sdp.h"
+
 #include "log.h"
+#include "backtrace.h"
 
 #include "adapter.h"
 #include "device.h"
@@ -91,8 +92,8 @@ static void change_state(struct btd_service *service, btd_service_state_t state,
 	if (state == old)
 		return;
 
-	assert(service->device != NULL);
-	assert(service->profile != NULL);
+	btd_assert(service->device != NULL);
+	btd_assert(service->profile != NULL);
 
 	service->state = state;
 	service->err = err;
@@ -154,7 +155,7 @@ int service_probe(struct btd_service *service)
 	char addr[18];
 	int err;
 
-	assert(service->state == BTD_SERVICE_STATE_UNAVAILABLE);
+	btd_assert(service->state == BTD_SERVICE_STATE_UNAVAILABLE);
 
 	err = service->profile->device_probe(service);
 	if (err == 0) {
@@ -170,11 +171,66 @@ int service_probe(struct btd_service *service)
 
 void service_remove(struct btd_service *service)
 {
+	change_state(service, BTD_SERVICE_STATE_DISCONNECTED, -ECONNABORTED);
 	change_state(service, BTD_SERVICE_STATE_UNAVAILABLE, 0);
 	service->profile->device_remove(service);
 	service->device = NULL;
 	service->profile = NULL;
 	btd_service_unref(service);
+}
+
+int service_accept(struct btd_service *service)
+{
+	char addr[18];
+	int err;
+
+	switch (service->state) {
+	case BTD_SERVICE_STATE_UNAVAILABLE:
+		return -EINVAL;
+	case BTD_SERVICE_STATE_DISCONNECTED:
+		break;
+	case BTD_SERVICE_STATE_CONNECTING:
+	case BTD_SERVICE_STATE_CONNECTED:
+		return 0;
+	case BTD_SERVICE_STATE_DISCONNECTING:
+		return -EBUSY;
+	}
+
+	if (!service->profile->accept)
+		return -ENOSYS;
+
+	err = service->profile->accept(service);
+	if (!err)
+		goto done;
+
+	ba2str(device_get_address(service->device), addr);
+	error("%s profile accept failed for %s", service->profile->name, addr);
+
+	return err;
+
+done:
+	if (service->state == BTD_SERVICE_STATE_DISCONNECTED)
+		change_state(service, BTD_SERVICE_STATE_CONNECTING, 0);
+	return 0;
+}
+
+int service_set_connecting(struct btd_service *service)
+{
+	switch (service->state) {
+	case BTD_SERVICE_STATE_UNAVAILABLE:
+		return -EINVAL;
+	case BTD_SERVICE_STATE_DISCONNECTED:
+		break;
+	case BTD_SERVICE_STATE_CONNECTING:
+	case BTD_SERVICE_STATE_CONNECTED:
+		return 0;
+	case BTD_SERVICE_STATE_DISCONNECTING:
+		return -EBUSY;
+	}
+
+	change_state(service, BTD_SERVICE_STATE_CONNECTING, 0);
+
+	return 0;
 }
 
 int btd_service_connect(struct btd_service *service)
@@ -192,6 +248,7 @@ int btd_service_connect(struct btd_service *service)
 	case BTD_SERVICE_STATE_DISCONNECTED:
 		break;
 	case BTD_SERVICE_STATE_CONNECTING:
+		return 0;
 	case BTD_SERVICE_STATE_CONNECTED:
 		return -EALREADY;
 	case BTD_SERVICE_STATE_DISCONNECTING:
@@ -263,7 +320,7 @@ struct btd_profile *btd_service_get_profile(const struct btd_service *service)
 
 void btd_service_set_user_data(struct btd_service *service, void *user_data)
 {
-	assert(service->state == BTD_SERVICE_STATE_UNAVAILABLE);
+	btd_assert(service->state == BTD_SERVICE_STATE_UNAVAILABLE);
 	service->user_data = user_data;
 }
 
@@ -317,7 +374,7 @@ bool btd_service_remove_state_cb(unsigned int id)
 void btd_service_connecting_complete(struct btd_service *service, int err)
 {
 	if (service->state != BTD_SERVICE_STATE_DISCONNECTED &&
-				service->state != BTD_SERVICE_STATE_CONNECTING)
+			service->state != BTD_SERVICE_STATE_CONNECTING)
 		return;
 
 	if (err == 0)

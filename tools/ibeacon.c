@@ -36,8 +36,8 @@
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 
-#include "monitor/mainloop.h"
 #include "monitor/bt.h"
+#include "src/shared/mainloop.h"
 #include "src/shared/timeout.h"
 #include "src/shared/util.h"
 #include "src/shared/hci.h"
@@ -149,7 +149,6 @@ static void adv_tx_power_callback(const void *data, uint8_t size,
 
 	cmd.data[0] = 0x02;		/* Field length */
 	cmd.data[1] = 0x01;		/* Flags */
-	cmd.data[2] = 0x02;		/* LE General Discoverable Mode */
 	cmd.data[2] |= 0x04;		/* BR/EDR Not Supported */
 
 	cmd.data[3] = 0x1a;		/* Field length */

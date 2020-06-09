@@ -74,6 +74,7 @@
 #define AVRCP_EVENT_TRACK_CHANGED		0x02
 #define AVRCP_EVENT_TRACK_REACHED_END		0x03
 #define AVRCP_EVENT_TRACK_REACHED_START		0x04
+#define AVRCP_EVENT_PLAYBACK_POS_CHANGED	0x05
 #define AVRCP_EVENT_SETTINGS_CHANGED		0x08
 #define AVRCP_EVENT_AVAILABLE_PLAYERS_CHANGED	0x0a
 #define AVRCP_EVENT_ADDRESSED_PLAYER_CHANGED	0x0b
@@ -92,6 +93,7 @@ struct avrcp_player_cb {
 	const char *(*get_status) (void *user_data);
 	uint32_t (*get_position) (void *user_data);
 	uint32_t (*get_duration) (void *user_data);
+	const char *(*get_name) (void *user_data);
 	void (*set_volume) (uint8_t volume, struct btd_device *dev,
 							void *user_data);
 	bool (*play) (void *user_data);
@@ -101,7 +103,7 @@ struct avrcp_player_cb {
 	bool (*previous) (void *user_data);
 };
 
-int avrcp_set_volume(struct btd_device *dev, uint8_t volume);
+int avrcp_set_volume(struct btd_device *dev, uint8_t volume, bool notify);
 
 struct avrcp_player *avrcp_register_player(struct btd_adapter *adapter,
 						struct avrcp_player_cb *cb,

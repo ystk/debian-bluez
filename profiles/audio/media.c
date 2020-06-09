@@ -31,9 +31,13 @@
 #include <inttypes.h>
 
 #include <glib.h>
-#include <gdbus/gdbus.h>
 
+#include "lib/bluetooth.h"
+#include "lib/sdp.h"
 #include "lib/uuid.h"
+
+#include "gdbus/gdbus.h"
+
 #include "src/plugin.h"
 #include "src/adapter.h"
 #include "src/device.h"
@@ -43,6 +47,7 @@
 #include "src/uuid-helper.h"
 #include "src/log.h"
 #include "src/error.h"
+#include "src/shared/queue.h"
 
 #include "avdtp.h"
 #include "media.h"
@@ -107,6 +112,7 @@ struct media_player {
 	bool			next;
 	bool			previous;
 	bool			control;
+	char			*name;
 };
 
 static GSList *adapters = NULL;
@@ -269,9 +275,6 @@ static void endpoint_reply(DBusPendingCall *call, void *user_data)
 
 		/* Clear endpoint configuration in case of NO_REPLY error */
 		if (dbus_error_has_name(&err, DBUS_ERROR_NO_REPLY)) {
-			if (request->cb)
-				request->cb(endpoint, NULL, size,
-							request->user_data);
 			clear_endpoint(endpoint);
 			dbus_message_unref(reply);
 			dbus_error_free(&err);
@@ -530,8 +533,9 @@ static void config_cb(struct media_endpoint *endpoint, void *ret, int size,
 							void *user_data)
 {
 	struct a2dp_config_data *data = user_data;
+	gboolean *ret_value = ret;
 
-	data->cb(data->setup, ret ? TRUE : FALSE);
+	data->cb(data->setup, ret_value ? *ret_value : FALSE);
 }
 
 static int set_config(struct a2dp_sep *sep, uint8_t *configuration,
@@ -961,6 +965,7 @@ static void media_player_free(gpointer data)
 	g_free(mp->sender);
 	g_free(mp->path);
 	g_free(mp->status);
+	g_free(mp->name);
 	g_free(mp);
 }
 
@@ -1007,6 +1012,16 @@ static const char *get_setting(const char *key, void *user_data)
 	DBG("%s", key);
 
 	return g_hash_table_lookup(mp->settings, key);
+}
+
+static const char *get_player_name(void *user_data)
+{
+	struct media_player *mp = user_data;
+
+	if (!mp->name)
+		return "Player";
+
+	return mp->name;
 }
 
 static void set_shuffle_setting(DBusMessageIter *iter, const char *value)
@@ -1269,6 +1284,7 @@ static struct avrcp_player_cb player_cb = {
 	.get_position = get_position,
 	.get_duration = get_duration,
 	.get_status = get_status,
+	.get_name = get_player_name,
 	.set_volume = set_volume,
 	.play = play,
 	.stop = stop,
@@ -1604,6 +1620,25 @@ static gboolean set_flag(struct media_player *mp, DBusMessageIter *iter,
 	return TRUE;
 }
 
+static gboolean set_name(struct media_player *mp, DBusMessageIter *iter)
+{
+	const char *value;
+
+	if (dbus_message_iter_get_arg_type(iter) != DBUS_TYPE_STRING)
+		return FALSE;
+
+	dbus_message_iter_get_basic(iter, &value);
+
+	if (g_strcmp0(mp->name, value) == 0)
+		return TRUE;
+
+	g_free(mp->name);
+
+	mp->name = g_strdup(value);
+
+	return TRUE;
+}
+
 static gboolean set_player_property(struct media_player *mp, const char *key,
 							DBusMessageIter *entry)
 {
@@ -1643,6 +1678,9 @@ static gboolean set_player_property(struct media_player *mp, const char *key,
 
 	if (strcasecmp(key, "CanControl") == 0)
 		return set_flag(mp, &var, &mp->control);
+
+	if (strcasecmp(key, "Identity") == 0)
+		return set_name(mp, &var);
 
 	DBG("%s not supported, ignoring", key);
 

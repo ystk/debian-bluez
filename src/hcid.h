@@ -23,20 +23,31 @@
  *
  */
 
+typedef enum {
+	BT_MODE_DUAL,
+	BT_MODE_BREDR,
+	BT_MODE_LE,
+} bt_mode_t;
+
 struct main_opts {
 	char		*name;
 	uint32_t	class;
 	uint16_t	autoto;
 	uint32_t	pairto;
 	uint32_t	discovto;
+	uint8_t		privacy;
+
 	gboolean	reverse_sdp;
 	gboolean	name_resolv;
 	gboolean	debug_keys;
+	gboolean	fast_conn;
 
 	uint16_t	did_source;
 	uint16_t	did_vendor;
 	uint16_t	did_product;
 	uint16_t	did_version;
+
+	bt_mode_t	mode;
 };
 
 extern struct main_opts main_opts;

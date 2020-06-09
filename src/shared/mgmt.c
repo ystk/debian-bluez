@@ -53,7 +53,6 @@ struct mgmt {
 	unsigned int next_notify_id;
 	bool need_notify_cleanup;
 	bool in_notify;
-	bool destroyed;
 	void *buf;
 	uint16_t len;
 	mgmt_debug_func_t debug_callback;
@@ -158,11 +157,42 @@ static void write_watch_destroy(void *user_data)
 	mgmt->writer_active = false;
 }
 
+static bool send_request(struct mgmt *mgmt, struct mgmt_request *request)
+{
+	struct iovec iov;
+	ssize_t ret;
+
+	iov.iov_base = request->buf;
+	iov.iov_len = request->len;
+
+	ret = io_send(mgmt->io, &iov, 1);
+	if (ret < 0) {
+		util_debug(mgmt->debug_callback, mgmt->debug_data,
+				"write failed: %s", strerror(-ret));
+		if (request->callback)
+			request->callback(MGMT_STATUS_FAILED, 0, NULL,
+							request->user_data);
+		destroy_request(request);
+		return false;
+	}
+
+	util_debug(mgmt->debug_callback, mgmt->debug_data,
+				"[0x%04x] command 0x%04x",
+				request->index, request->opcode);
+
+	util_hexdump('<', request->buf, ret, mgmt->debug_callback,
+							mgmt->debug_data);
+
+	queue_push_tail(mgmt->pending_list, request);
+
+	return true;
+}
+
 static bool can_write_data(struct io *io, void *user_data)
 {
 	struct mgmt *mgmt = user_data;
 	struct mgmt_request *request;
-	ssize_t bytes_written;
+	bool can_write;
 
 	request = queue_pop_head(mgmt->reply_queue);
 	if (!request) {
@@ -173,29 +203,17 @@ static bool can_write_data(struct io *io, void *user_data)
 		request = queue_pop_head(mgmt->request_queue);
 		if (!request)
 			return false;
+
+		can_write = false;
+	} else {
+		/* allow multiple replies to jump the queue */
+		can_write = !queue_isempty(mgmt->reply_queue);
 	}
 
-	bytes_written = write(mgmt->fd, request->buf, request->len);
-	if (bytes_written < 0) {
-		util_debug(mgmt->debug_callback, mgmt->debug_data,
-				"write failed: %s", strerror(errno));
-		if (request->callback)
-			request->callback(MGMT_STATUS_FAILED, 0, NULL,
-							request->user_data);
-		destroy_request(request);
+	if (!send_request(mgmt, request))
 		return true;
-	}
 
-	util_debug(mgmt->debug_callback, mgmt->debug_data,
-				"[0x%04x] command 0x%04x",
-				request->index, request->opcode);
-
-	util_hexdump('<', request->buf, bytes_written,
-				mgmt->debug_callback, mgmt->debug_data);
-
-	queue_push_tail(mgmt->pending_list, request);
-
-	return false;
+	return can_write;
 }
 
 static void wakeup_writer(struct mgmt *mgmt)
@@ -208,6 +226,8 @@ static void wakeup_writer(struct mgmt *mgmt)
 
 	if (mgmt->writer_active)
 		return;
+
+	mgmt->writer_active = true;
 
 	io_set_write_handler(mgmt->io, can_write_data, mgmt,
 						write_watch_destroy);
@@ -243,9 +263,6 @@ static void request_complete(struct mgmt *mgmt, uint8_t status,
 
 		destroy_request(request);
 	}
-
-	if (mgmt->destroyed)
-		return;
 
 	wakeup_writer(mgmt);
 }
@@ -295,17 +312,6 @@ static void process_notify(struct mgmt *mgmt, uint16_t event, uint16_t index,
 	}
 }
 
-static void read_watch_destroy(void *user_data)
-{
-	struct mgmt *mgmt = user_data;
-
-	if (mgmt->destroyed) {
-		queue_destroy(mgmt->notify_list, NULL);
-		queue_destroy(mgmt->pending_list, NULL);
-		free(mgmt);
-	}
-}
-
 static bool can_read_data(struct io *io, void *user_data)
 {
 	struct mgmt *mgmt = user_data;
@@ -332,6 +338,8 @@ static bool can_read_data(struct io *io, void *user_data)
 
 	if (bytes_read < length + MGMT_HDR_SIZE)
 		return true;
+
+	mgmt_ref(mgmt);
 
 	switch (event) {
 	case MGMT_EV_CMD_COMPLETE:
@@ -364,8 +372,7 @@ static bool can_read_data(struct io *io, void *user_data)
 		break;
 	}
 
-	if (mgmt->destroyed)
-		return false;
+	mgmt_unref(mgmt);
 
 	return true;
 }
@@ -378,9 +385,6 @@ struct mgmt *mgmt_new(int fd)
 		return NULL;
 
 	mgmt = new0(struct mgmt, 1);
-	if (!mgmt)
-		return NULL;
-
 	mgmt->fd = fd;
 	mgmt->close_on_unref = false;
 
@@ -399,45 +403,11 @@ struct mgmt *mgmt_new(int fd)
 	}
 
 	mgmt->request_queue = queue_new();
-	if (!mgmt->request_queue) {
-		io_destroy(mgmt->io);
-		free(mgmt->buf);
-		free(mgmt);
-		return NULL;
-	}
-
 	mgmt->reply_queue = queue_new();
-	if (!mgmt->reply_queue) {
-		queue_destroy(mgmt->request_queue, NULL);
-		io_destroy(mgmt->io);
-		free(mgmt->buf);
-		free(mgmt);
-		return NULL;
-	}
-
 	mgmt->pending_list = queue_new();
-	if (!mgmt->pending_list) {
-		queue_destroy(mgmt->reply_queue, NULL);
-		queue_destroy(mgmt->request_queue, NULL);
-		io_destroy(mgmt->io);
-		free(mgmt->buf);
-		free(mgmt);
-		return NULL;
-	}
-
 	mgmt->notify_list = queue_new();
-	if (!mgmt->notify_list) {
-		queue_destroy(mgmt->pending_list, NULL);
-		queue_destroy(mgmt->reply_queue, NULL);
-		queue_destroy(mgmt->request_queue, NULL);
-		io_destroy(mgmt->io);
-		free(mgmt->buf);
-		free(mgmt);
-		return NULL;
-	}
 
-	if (!io_set_read_handler(mgmt->io, can_read_data, mgmt,
-						read_watch_destroy)) {
+	if (!io_set_read_handler(mgmt->io, can_read_data, mgmt, NULL)) {
 		queue_destroy(mgmt->notify_list, NULL);
 		queue_destroy(mgmt->pending_list, NULL);
 		queue_destroy(mgmt->reply_queue, NULL);
@@ -533,8 +503,6 @@ void mgmt_unref(struct mgmt *mgmt)
 		free(mgmt);
 		return;
 	}
-
-	mgmt->destroyed = true;
 }
 
 bool mgmt_set_debug(struct mgmt *mgmt, mgmt_debug_func_t callback,
@@ -578,9 +546,6 @@ static struct mgmt_request *create_request(uint16_t opcode, uint16_t index,
 		return NULL;
 
 	request = new0(struct mgmt_request, 1);
-	if (!request)
-		return NULL;
-
 	request->len = length + MGMT_HDR_SIZE;
 	request->buf = malloc(request->len);
 	if (!request->buf) {
@@ -633,6 +598,32 @@ unsigned int mgmt_send(struct mgmt *mgmt, uint16_t opcode, uint16_t index,
 	}
 
 	wakeup_writer(mgmt);
+
+	return request->id;
+}
+
+unsigned int mgmt_send_nowait(struct mgmt *mgmt, uint16_t opcode, uint16_t index,
+				uint16_t length, const void *param,
+				mgmt_request_func_t callback,
+				void *user_data, mgmt_destroy_func_t destroy)
+{
+	struct mgmt_request *request;
+
+	if (!mgmt)
+		return 0;
+
+	request = create_request(opcode, index, length, param,
+					callback, user_data, destroy);
+	if (!request)
+		return 0;
+
+	if (mgmt->next_request_id < 1)
+		mgmt->next_request_id = 1;
+
+	request->id = mgmt->next_request_id++;
+
+	if (!send_request(mgmt, request))
+		return 0;
 
 	return request->id;
 }
@@ -735,9 +726,6 @@ unsigned int mgmt_register(struct mgmt *mgmt, uint16_t event, uint16_t index,
 		return 0;
 
 	notify = new0(struct mgmt_notify, 1);
-	if (!notify)
-		return 0;
-
 	notify->event = event;
 	notify->index = index;
 

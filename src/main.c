@@ -33,19 +33,22 @@
 #include <stdlib.h>
 #include <string.h>
 #include <signal.h>
+#include <stdbool.h>
 #include <sys/signalfd.h>
 #include <sys/types.h>
 #include <sys/stat.h>
-
-#include <bluetooth/bluetooth.h>
 
 #include <glib.h>
 
 #include <dbus/dbus.h>
 
-#include <gdbus/gdbus.h>
+#include "lib/bluetooth.h"
+#include "lib/sdp.h"
+
+#include "gdbus/gdbus.h"
 
 #include "log.h"
+#include "backtrace.h"
 
 #include "lib/uuid.h"
 #include "hcid.h"
@@ -55,7 +58,6 @@
 #include "dbus-common.h"
 #include "agent.h"
 #include "profile.h"
-#include "gatt.h"
 #include "systemd.h"
 
 #define BLUEZ_NAME "org.bluez"
@@ -68,6 +70,12 @@
 struct main_opts main_opts;
 static GKeyFile *main_conf;
 
+static enum {
+	MPS_OFF,
+	MPS_SINGLE,
+	MPS_MULTIPLE,
+} mps = MPS_OFF;
+
 static const char * const supported_options[] = {
 	"Name",
 	"Class",
@@ -79,6 +87,9 @@ static const char * const supported_options[] = {
 	"ReverseServiceDiscovery",
 	"NameResolving",
 	"DebugKeys",
+	"ControllerMode",
+	"MultiProfile",
+	"Privacy",
 };
 
 GKeyFile *btd_get_main_conf(void)
@@ -187,6 +198,20 @@ static void check_config(GKeyFile *config)
 	g_strfreev(keys);
 }
 
+static int get_mode(const char *str)
+{
+	if (strcmp(str, "dual") == 0)
+		return BT_MODE_DUAL;
+	else if (strcmp(str, "bredr") == 0)
+		return BT_MODE_BREDR;
+	else if (strcmp(str, "le") == 0)
+		return BT_MODE_LE;
+
+	error("Unknown controller mode \"%s\"", str);
+
+	return BT_MODE_DUAL;
+}
+
 static void parse_config(GKeyFile *config)
 {
 	GError *err = NULL;
@@ -229,6 +254,26 @@ static void parse_config(GKeyFile *config)
 	} else {
 		DBG("auto_to=%d", val);
 		main_opts.autoto = val;
+	}
+
+	str = g_key_file_get_string(config, "General", "Privacy", &err);
+	if (err) {
+		DBG("%s", err->message);
+		g_clear_error(&err);
+		main_opts.privacy = 0x00;
+	} else {
+		DBG("privacy=%s", str);
+
+		if (!strcmp(str, "device"))
+			main_opts.privacy = 0x01;
+		else if (!strcmp(str, "off"))
+			main_opts.privacy = 0x00;
+		else {
+			DBG("Invalid privacy option: %s", str);
+			main_opts.privacy = 0x00;
+		}
+
+		g_free(str);
 	}
 
 	str = g_key_file_get_string(config, "General", "Name", &err);
@@ -282,6 +327,36 @@ static void parse_config(GKeyFile *config)
 		g_clear_error(&err);
 	else
 		main_opts.debug_keys = boolean;
+
+	str = g_key_file_get_string(config, "General", "ControllerMode", &err);
+	if (err) {
+		g_clear_error(&err);
+	} else {
+		DBG("ControllerMode=%s", str);
+		main_opts.mode = get_mode(str);
+		g_free(str);
+	}
+
+	str = g_key_file_get_string(config, "General", "MultiProfile", &err);
+	if (err) {
+		g_clear_error(&err);
+	} else {
+		DBG("MultiProfile=%s", str);
+
+		if (!strcmp(str, "single"))
+			mps = MPS_SINGLE;
+		else if (!strcmp(str, "multiple"))
+			mps = MPS_MULTIPLE;
+
+		g_free(str);
+	}
+
+	boolean = g_key_file_get_boolean(config, "General",
+						"FastConnectable", &err);
+	if (err)
+		g_clear_error(&err);
+	else
+		main_opts.fast_conn = boolean;
 }
 
 static void init_defaults(void)
@@ -307,6 +382,21 @@ static void init_defaults(void)
 	main_opts.did_version = (major << 8 | minor);
 }
 
+static void log_handler(const gchar *log_domain, GLogLevelFlags log_level,
+				const gchar *message, gpointer user_data)
+{
+	int priority;
+
+	if (log_level & (G_LOG_LEVEL_ERROR |
+				G_LOG_LEVEL_CRITICAL | G_LOG_LEVEL_WARNING))
+		priority = 0x03;
+	else
+		priority = 0x06;
+
+	btd_log(0xffff, priority, "GLib: %s", message);
+	btd_backtrace(0xffff);
+}
+
 static GMainLoop *event_loop;
 
 void btd_exit(void)
@@ -323,7 +413,7 @@ static gboolean quit_eventloop(gpointer user_data)
 static gboolean signal_handler(GIOChannel *channel, GIOCondition cond,
 							gpointer user_data)
 {
-	static unsigned int __terminated = 0;
+	static bool terminated = false;
 	struct signalfd_siginfo si;
 	ssize_t result;
 	int fd;
@@ -340,7 +430,7 @@ static gboolean signal_handler(GIOChannel *channel, GIOCondition cond,
 	switch (si.ssi_signo) {
 	case SIGINT:
 	case SIGTERM:
-		if (__terminated == 0) {
+		if (!terminated) {
 			info("Terminating");
 			g_timeout_add_seconds(SHUTDOWN_GRACE_SECONDS,
 							quit_eventloop, NULL);
@@ -349,7 +439,7 @@ static gboolean signal_handler(GIOChannel *channel, GIOCondition cond,
 			adapter_shutdown();
 		}
 
-		__terminated = 1;
+		terminated = true;
 		break;
 	case SIGUSR2:
 		__btd_toggle_debug();
@@ -532,11 +622,17 @@ int main(int argc, char *argv[])
 
 	umask(0077);
 
+	btd_backtrace_init();
+
 	event_loop = g_main_loop_new(NULL, FALSE);
 
 	signal = setup_signalfd();
 
 	__btd_log_init(option_debug, option_detach);
+
+	g_log_set_handler("GLib", G_LOG_LEVEL_MASK | G_LOG_FLAG_FATAL |
+							G_LOG_FLAG_RECURSION,
+							log_handler, NULL);
 
 	sd_notify(0, "STATUS=Starting up");
 
@@ -554,8 +650,6 @@ int main(int argc, char *argv[])
 
 	g_dbus_set_flags(gdbus_flags);
 
-	gatt_init();
-
 	if (adapter_init() < 0) {
 		error("Adapter handling initialization failed");
 		exit(1);
@@ -565,14 +659,21 @@ int main(int argc, char *argv[])
 	btd_agent_init();
 	btd_profile_init();
 
-	if (option_compat == TRUE)
-		sdp_flags |= SDP_SERVER_COMPAT;
+	if (main_opts.mode != BT_MODE_LE) {
+		if (option_compat == TRUE)
+			sdp_flags |= SDP_SERVER_COMPAT;
 
-	start_sdp_server(sdp_mtu, sdp_flags);
+		start_sdp_server(sdp_mtu, sdp_flags);
 
-	if (main_opts.did_source > 0)
-		register_device_id(main_opts.did_source, main_opts.did_vendor,
-				main_opts.did_product, main_opts.did_version);
+		if (main_opts.did_source > 0)
+			register_device_id(main_opts.did_source,
+						main_opts.did_vendor,
+						main_opts.did_product,
+						main_opts.did_version);
+	}
+
+	if (mps != MPS_OFF)
+		register_mps(mps == MPS_MULTIPLE);
 
 	/* Loading plugins has to be done after D-Bus has been setup since
 	 * the plugins might wanna expose some paths on the bus. However the
@@ -618,11 +719,10 @@ int main(int argc, char *argv[])
 
 	adapter_cleanup();
 
-	gatt_cleanup();
-
 	rfkill_exit();
 
-	stop_sdp_server();
+	if (main_opts.mode != BT_MODE_LE)
+		stop_sdp_server();
 
 	g_main_loop_unref(event_loop);
 
