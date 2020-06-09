@@ -26,16 +26,62 @@
 #endif
 
 #include "src/shared/crypto.h"
+#include "src/shared/util.h"
+#include "src/shared/tester.h"
 
 #include <string.h>
 #include <glib.h>
 
 static struct bt_crypto *crypto;
 
+static void print_debug(const char *str, void *user_data)
+{
+	tester_debug("%s", str);
+}
+
+static void test_h6(gconstpointer data)
+{
+	const uint8_t w[16] = {
+			0x9b, 0x7d, 0x39, 0x0a, 0xa6, 0x10, 0x10, 0x34,
+			0x05, 0xad, 0xc8, 0x57, 0xa3, 0x34, 0x02, 0xec };
+	const uint8_t m[4] = { 0x72, 0x62, 0x65, 0x6c };
+	const uint8_t exp[16] = {
+			0x99, 0x63, 0xb1, 0x80, 0xe2, 0xa9, 0xd3, 0xe8,
+			0x1c, 0xc9, 0x6d, 0xe7, 0x02, 0xe1, 0x9a, 0x2d };
+	uint8_t res[16];
+
+	tester_debug("W:");
+	util_hexdump(' ', w, 16, print_debug, NULL);
+
+	tester_debug("M:");
+	util_hexdump(' ', m, 4, print_debug, NULL);
+
+	if (!bt_crypto_h6(crypto, w, m, res)) {
+		tester_test_failed();
+		return;
+	}
+
+	tester_debug("Expected:");
+	util_hexdump(' ', exp, 16, print_debug, NULL);
+
+	tester_debug("Result:");
+	util_hexdump(' ', res, 16, print_debug, NULL);
+
+
+	if (memcmp(res, exp, 16)) {
+		tester_test_failed();
+		return;
+	}
+
+	tester_test_passed();
+}
+
 struct test_data {
 	const uint8_t *msg;
 	uint16_t msg_len;
 	const uint8_t *t;
+	const uint8_t *key;
+	uint32_t cnt;
 };
 
 static const uint8_t key[] = {
@@ -52,7 +98,8 @@ static const uint8_t t_msg_1[] = {
 static const struct test_data test_data_1 = {
 	.msg = msg_1,
 	.msg_len = 0,
-	.t = t_msg_1
+	.t = t_msg_1,
+	.key = key,
 };
 
 static const uint8_t msg_2[] = {
@@ -68,7 +115,8 @@ static const uint8_t t_msg_2[] = {
 static const struct test_data test_data_2 = {
 	.msg = msg_2,
 	.msg_len = 16,
-	.t = t_msg_2
+	.t = t_msg_2,
+	.key = key,
 };
 
 static const uint8_t msg_3[] = {
@@ -85,7 +133,8 @@ static const uint8_t t_msg_3[12] = {
 static const struct test_data test_data_3 = {
 	.msg = msg_3,
 	.msg_len = 40,
-	.t = t_msg_3
+	.t = t_msg_3,
+	.key = key,
 };
 
 static const uint8_t msg_4[] = {
@@ -104,18 +153,31 @@ static const uint8_t t_msg_4[12] = {
 static const struct test_data test_data_4 = {
 	.msg = msg_4,
 	.msg_len = 64,
-	.t = t_msg_4
+	.t = t_msg_4,
+	.key = key,
 };
 
-static void print_buf(const uint8_t *t, uint8_t len)
-{
-	int i;
+static const uint8_t msg_5[] = {
+		0xd2, 0x12, 0x00, 0x13, 0x37
+};
 
-	for (i = 0; i < len; i++)
-		g_print("0x%02x, ", t[i]);
+static const uint8_t key_5[] = {
+		0x50, 0x5E, 0x42, 0xDF, 0x96, 0x91, 0xEC, 0x72, 0xD3, 0x1F,
+		0xCD, 0xFB, 0xEB, 0x64, 0x1B, 0x61
+};
 
-	g_print("\n");
-}
+static const uint8_t t_msg_5[] = {
+		0x01, 0x00, 0x00, 0x00, 0xF1, 0x87, 0x1E, 0x93, 0x3C, 0x90,
+		0x0F, 0xf2
+};
+
+static const struct test_data test_data_5 = {
+	.msg = msg_5,
+	.msg_len = sizeof(msg_5),
+	.t = t_msg_5,
+	.cnt = 1,
+	.key = key_5,
+};
 
 static bool result_compare(const uint8_t exp[12], uint8_t res[12])
 {
@@ -133,17 +195,17 @@ static void test_sign(gconstpointer data)
 	const struct test_data *d = data;
 
 	memset(t, 0, 12);
-	if (!bt_crypto_sign_att(crypto, key, d->msg, d->msg_len, 0, t))
+	if (!bt_crypto_sign_att(crypto, d->key, d->msg, d->msg_len, d->cnt, t))
 		g_assert(true);
 
-	if (g_test_verbose()) {
-		g_print("Result T: ");
-		print_buf(t, 12);
-		g_print("Expected T:");
-		print_buf(d->t, 12);
-	}
+	tester_debug("Result T:");
+	util_hexdump(' ', t, 12, print_debug, NULL);
+	tester_debug("Expected T:");
+	util_hexdump(' ', d->t, 12, print_debug, NULL);
 
 	g_assert(result_compare(d->t, t));
+
+	tester_test_passed();
 }
 
 int main(int argc, char *argv[])
@@ -154,14 +216,17 @@ int main(int argc, char *argv[])
 	if (!crypto)
 		return 0;
 
-	g_test_init(&argc, &argv, NULL);
+	tester_init(&argc, &argv);
 
-	g_test_add_data_func("/crypto/sign_att_1", &test_data_1, test_sign);
-	g_test_add_data_func("/crypto/sign_att_2", &test_data_2, test_sign);
-	g_test_add_data_func("/crypto/sign_att_3", &test_data_3, test_sign);
-	g_test_add_data_func("/crypto/sign_att_4", &test_data_4, test_sign);
+	tester_add("/crypto/h6", NULL, NULL, test_h6, NULL);
 
-	exit_status = g_test_run();
+	tester_add("/crypto/sign_att_1", &test_data_1, NULL, test_sign, NULL);
+	tester_add("/crypto/sign_att_2", &test_data_2, NULL, test_sign, NULL);
+	tester_add("/crypto/sign_att_3", &test_data_3, NULL, test_sign, NULL);
+	tester_add("/crypto/sign_att_4", &test_data_4, NULL, test_sign, NULL);
+	tester_add("/crypto/sign_att_5", &test_data_5, NULL, test_sign, NULL);
+
+	exit_status = tester_run();
 
 	bt_crypto_unref(crypto);
 

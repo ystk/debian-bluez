@@ -25,7 +25,6 @@
 #include <config.h>
 #endif
 
-#include <stdio.h>
 #include <ctype.h>
 #include <stdlib.h>
 #include <unistd.h>
@@ -37,8 +36,9 @@
 #include "lib/hci.h"
 #include "lib/mgmt.h"
 
-#include "monitor/mainloop.h"
+#include "src/shared/mainloop.h"
 #include "src/shared/btsnoop.h"
+#include "src/log.h"
 
 #define DEFAULT_SNOOP_FILE "/sdcard/btsnoop_hci.log"
 
@@ -72,6 +72,9 @@ static uint32_t get_flags_from_opcode(uint16_t opcode)
 		return 0x01;
 	case BTSNOOP_OPCODE_SCO_TX_PKT:
 	case BTSNOOP_OPCODE_SCO_RX_PKT:
+		break;
+	case BTSNOOP_OPCODE_OPEN_INDEX:
+	case BTSNOOP_OPCODE_CLOSE_INDEX:
 		break;
 	}
 
@@ -136,7 +139,7 @@ static void data_callback(int fd, uint32_t events, void *user_data)
 
 		flags = get_flags_from_opcode(opcode);
 		if (flags != 0xff)
-			btsnoop_write(snoop, tv, flags, monitor_buf, pktlen);
+			btsnoop_write(snoop, tv, flags, 0, monitor_buf, pktlen);
 	}
 }
 
@@ -145,7 +148,7 @@ static int open_monitor(const char *path)
 	struct sockaddr_hci addr;
 	int opt = 1;
 
-	snoop = btsnoop_create(path, BTSNOOP_TYPE_HCI);
+	snoop = btsnoop_create(path, BTSNOOP_FORMAT_HCI);
 	if (!snoop)
 		return -1;
 
@@ -218,6 +221,10 @@ int main(int argc, char *argv[])
 	const char *path;
 	sigset_t mask;
 
+	__btd_log_init(NULL, 0);
+
+	DBG("");
+
 	set_capabilities();
 
 	if (argc > 1)
@@ -237,13 +244,19 @@ int main(int argc, char *argv[])
 		rename(DEFAULT_SNOOP_FILE, DEFAULT_SNOOP_FILE ".old");
 
 	if (open_monitor(path) < 0) {
-		printf("Failed to start bluetoothd_snoop\n");
+		error("bluetoothd_snoop: start failed");
 		return EXIT_FAILURE;
 	}
+
+	info("bluetoothd_snoop: started");
 
 	mainloop_run();
 
 	close_monitor();
+
+	info("bluetoothd_snoop: stopped");
+
+	__btd_log_cleanup();
 
 	return EXIT_SUCCESS;
 }

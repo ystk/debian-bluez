@@ -29,15 +29,20 @@
 #include <errno.h>
 
 #include <glib.h>
-#include <gdbus/gdbus.h>
 
+#include "lib/bluetooth.h"
+#include "lib/sdp.h"
 #include "lib/uuid.h"
+
+#include "gdbus/gdbus.h"
+
 #include "src/adapter.h"
 #include "src/device.h"
 #include "src/dbus-common.h"
 
 #include "src/log.h"
 #include "src/error.h"
+#include "src/shared/queue.h"
 
 #include "avdtp.h"
 #include "media.h"
@@ -278,8 +283,8 @@ static gboolean media_transport_set_fd(struct media_transport *transport,
 	return TRUE;
 }
 
-static void a2dp_resume_complete(struct avdtp *session,
-				struct avdtp_error *err, void *user_data)
+static void a2dp_resume_complete(struct avdtp *session, int err,
+							void *user_data)
 {
 	struct media_owner *owner = user_data;
 	struct media_request *req = owner->pending;
@@ -332,7 +337,7 @@ static guint resume_a2dp(struct media_transport *transport,
 	guint id;
 
 	if (a2dp->session == NULL) {
-		a2dp->session = avdtp_get(transport->device);
+		a2dp->session = a2dp_avdtp_get(transport->device);
 		if (a2dp->session == NULL)
 			return 0;
 	}
@@ -357,8 +362,8 @@ static guint resume_a2dp(struct media_transport *transport,
 	return id;
 }
 
-static void a2dp_suspend_complete(struct avdtp *session,
-				struct avdtp_error *err, void *user_data)
+static void a2dp_suspend_complete(struct avdtp *session, int err,
+							void *user_data)
 {
 	struct media_owner *owner = user_data;
 	struct media_transport *transport = owner->transport;
@@ -648,6 +653,7 @@ static void set_volume(const GDBusPropertyTable *property,
 	struct media_transport *transport = data;
 	struct a2dp_transport *a2dp = transport->data;
 	uint16_t volume;
+	bool notify;
 
 	if (dbus_message_iter_get_arg_type(iter) != DBUS_TYPE_UINT16) {
 		g_dbus_pending_property_error(id,
@@ -665,12 +671,21 @@ static void set_volume(const GDBusPropertyTable *property,
 		return;
 	}
 
-	if (a2dp->volume != volume)
-		avrcp_set_volume(transport->device, volume);
+	g_dbus_pending_property_success(id);
+
+	if (a2dp->volume == volume)
+		return;
 
 	a2dp->volume = volume;
 
-	g_dbus_pending_property_success(id);
+	notify = transport->source_watch ? true : false;
+	if (notify)
+		g_dbus_emit_property_changed(btd_get_dbus_connection(),
+						transport->path,
+						MEDIA_TRANSPORT_INTERFACE,
+						"Volume");
+
+	avrcp_set_volume(transport->device, volume, notify);
 }
 
 static const GDBusMethodTable transport_methods[] = {
@@ -812,7 +827,6 @@ static int media_transport_init_sink(struct media_transport *transport)
 	transport->destroy = destroy_a2dp;
 
 	a2dp->volume = 127;
-	avrcp_set_volume(transport->device, a2dp->volume);
 	transport->source_watch = source_add_state_cb(service,
 							source_state_changed,
 							transport);

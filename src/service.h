@@ -48,6 +48,9 @@ struct btd_service *service_create(struct btd_device *device,
 int service_probe(struct btd_service *service);
 void service_remove(struct btd_service *service);
 
+int service_accept(struct btd_service *service);
+int service_set_connecting(struct btd_service *service);
+
 /* Connection control API */
 int btd_service_connect(struct btd_service *service);
 int btd_service_disconnect(struct btd_service *service);

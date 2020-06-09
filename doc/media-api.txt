@@ -71,43 +71,43 @@ Media Control hierarchy
 =======================
 
 Service		org.bluez
-Interface	org.bluez.MediaControl1 [Deprecated]
+Interface	org.bluez.MediaControl1
 Object path	[variable prefix]/{hci0,hci1,...}/dev_XX_XX_XX_XX_XX_XX
 
-Methods		void Play()
+Methods		void Play() [Deprecated]
 
 			Resume playback.
 
-		void Pause()
+		void Pause() [Deprecated]
 
 			Pause playback.
 
-		void Stop()
+		void Stop() [Deprecated]
 
 			Stop playback.
 
-		void Next()
+		void Next() [Deprecated]
 
 			Next item.
 
-		void Previous()
+		void Previous() [Deprecated]
 
 			Previous item.
 
-		void VolumeUp()
+		void VolumeUp() [Deprecated]
 
 			Adjust remote volume one step up
 
-		void VolumeDown()
+		void VolumeDown() [Deprecated]
 
 			Adjust remote volume one step down
 
-		void FastForward()
+		void FastForward() [Deprecated]
 
 			Fast forward playback, this action is only stopped
 			when another method in this interface is called.
 
-		void Rewind()
+		void Rewind() [Deprecated]
 
 			Rewind playback, this action is only stopped
 			when another method in this interface is called.
@@ -115,6 +115,10 @@ Methods		void Play()
 Properties
 
 		boolean Connected [readonly]
+
+		object Player [readonly, optional]
+
+			Addressed Player object path.
 
 
 MediaPlayer1 hierarchy
@@ -593,54 +597,10 @@ Properties	object Device [readonly]
 			property is only writeable when the transport was
 			acquired by the sender.
 
-		boolean NREC [readwrite]
-
-			Optional and HFP specific (external to BlueZ).
-			Indicates if echo cancelling and noise reduction
-			functions are active in the transport, this
-			property is only writeable when the transport
-			was acquired by the sender.
-
-		boolean InbandRingtone [readwrite]
-
-			Optional and HFP specific (external to BlueZ).
-			Indicates if the transport support sending
-			ringtones, this property is only writeable when
-			the transport was acquired by the sender.
-
-		string Routing [readonly]
-
-			Optional and HFP specific (external to BlueZ).
-			Indicates where is the transport being routed.
-
-			Possible Values: "HCI" or "PCM"
-
 		uint16 Volume [readwrite]
 
 			Optional. Indicates volume level of the transport,
 			this property is only writeable when the transport was
 			acquired by the sender.
 
-			Note: the property will not be present for HSP/HFP
-			transports and MicrophoneGain/SpeakerGain should be
-			used instead.
-
 			Possible Values: 0-127
-
-		byte MicrophoneGain [readwrite]
-
-			Optional. Indicates volume level of the transport's
-			incoming audio stream for HSP/HFP transports. This
-			property is only writeable when the transport was
-			acquired by the sender.
-
-			Possible Values: 0-15
-
-		byte SpeakerGain [readwrite]
-
-			Optional. Indicates volume level of the transport's
-			outgoing audio stream for HSP/HFP transports. This
-			property is only writeable when the transport was
-			acquired by the sender.
-
-			Possible Values: 0-15

@@ -26,9 +26,10 @@
 #endif
 
 #include <errno.h>
-#include <gdbus/gdbus.h>
 
-#include "log.h"
+#include "gdbus/gdbus.h"
+
+#include "obexd/src/log.h"
 
 #include "transfer.h"
 #include "session.h"
@@ -116,7 +117,8 @@ fail:
 static DBusMessage *opp_exchange_business_cards(DBusConnection *connection,
 					DBusMessage *message, void *user_data)
 {
-	return g_dbus_create_error(message, ERROR_INTERFACE ".Failed", NULL);
+	return g_dbus_create_error(message, ERROR_INTERFACE ".Failed",
+							"Not Implemented");
 }
 
 static const GDBusMethodTable opp_methods[] = {

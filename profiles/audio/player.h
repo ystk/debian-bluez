@@ -64,10 +64,13 @@ struct media_player_callback {
 					uint64_t uid, void *user_data);
 	int (*add_to_nowplaying) (struct media_player *mp, const char *name,
 					uint64_t uid, void *user_data);
+	int (*total_items) (struct media_player *mp, const char *name,
+						void *user_data);
 };
 
 struct media_player *media_player_controller_create(const char *path,
 								uint16_t id);
+const char *media_player_get_path(struct media_player *mp);
 void media_player_destroy(struct media_player *mp);
 void media_player_set_duration(struct media_player *mp, uint32_t duration);
 void media_player_set_position(struct media_player *mp, uint32_t position);
@@ -82,6 +85,7 @@ void media_player_set_type(struct media_player *mp, const char *type);
 void media_player_set_subtype(struct media_player *mp, const char *subtype);
 void media_player_set_name(struct media_player *mp, const char *name);
 void media_player_set_browsable(struct media_player *mp, bool enabled);
+bool media_player_get_browsable(struct media_player *mp);
 void media_player_set_searchable(struct media_player *mp, bool enabled);
 void media_player_set_folder(struct media_player *mp, const char *path,
 								uint32_t items);
@@ -104,6 +108,8 @@ void media_player_list_complete(struct media_player *mp, GSList *items,
 void media_player_change_folder_complete(struct media_player *player,
 						const char *path, int ret);
 void media_player_search_complete(struct media_player *mp, int ret);
+void media_player_total_items_complete(struct media_player *mp,
+						uint32_t num_of_items);
 
 void media_player_set_callbacks(struct media_player *mp,
 				const struct media_player_callback *cbs,

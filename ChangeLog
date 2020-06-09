@@ -1,3 +1,212 @@
+ver 5.43:
+	Fix issue with HID over GATT support.
+	Fix issue with ATT Find By Type response handling.
+	Fix issue with handling insufficient authentication.
+	Fix issue with bonding while pairing is in progress.
+	Fix issue with BR/EDR pairing for dual-mode devices.
+	Fix issue with handling profile policy resets.
+	Fix issue with connecting state of services.
+	Fix issue with handling PAN GN Master role.
+	Add support for enabling LE Privacy feature.
+
+ver 5.42:
+	Fix issue with PBAP call logs from different folders.
+	Fix issue with OBEX over L2CAP and PowerPC architecture.
+	Fix issue with BR/EDR over LE selection during discovery.
+	Fix issue with selection of bearer after bonding.
+	Fix issue with handling socket recv() return values.
+	Fix issue with setting connecting service state.
+	Fix issue with setting correct ATT default MTU value.
+	Fix issue with not setting AVRCP player identifier.
+	Fix issue with handling AVRCP browsable player.
+	Fix issue with addressing AVRCP player changes.
+	Add support for new management tracing capability.
+	Mark GATT D-Bus APIs as stable interfaces.
+
+ver 5.41:
+	Fix issue with service state changes handling.
+	Fix issue with AVRCP and no available player.
+	Fix issue with handling discovery filters.
+	Fix issue with handling temporary addresses.
+	Fix issue with GATT MTU size and BR/EDR links.
+	Fix issue with OBEX and creating directories.
+
+ver 5.40:
+	Fix issue with not storing GATT attributes.
+	Fix issue with optional GATT notifications.
+	Fix issue with reading GATT extended properties.
+	Fix issue with GATT device name properties.
+	Fix issue with previously paired devices.
+	Fix issue with handling device removal.
+	Fix issue with profile connection handling.
+	Add support for TTY monitor protocol.
+
+ver 5.39:
+	Fix issue with missing uHID kernel support.
+	Fix issue with GATT reliable write handling.
+	Fix issue with GATT service changed handling.
+	Fix issue with GATT execute write handling.
+	Fix issue with AVRCP player event handling.
+	Fix issue with AVRCP controller handling.
+	Fix issue with AVDTP connection handling.
+	Fix issue with AVDTP error handling.
+
+ver 5.38:
+	Fix issue with stack overflow and UUID handling.
+	Fix issue with ObjectManager interface and GATT.
+	Fix issue with GATT database and error handling.
+	Fix issue with GATT client notifications.
+	Fix issue with GATT object ordering.
+	Fix issue with GATT default MTU exchange.
+	Fix issue with device attribute clearing.
+	Fix issue with AVRCP capabilities request.
+
+ver 5.37:
+	Fix issue with registering external profiles.
+	Fix issue with connecting external profiles.
+	Fix issue with GATT service changed handling.
+	Fix issue with not emitting GattServices update.
+	Convert to unified HID over GATT profile support.
+	Convert to KeyboardDisplay as default IO capability.
+	Install btattach utility by default.
+
+ver 5.36:
+	Fix issue with PBAP headers for size query.
+	Fix issue with AVRCP current player handling.
+	Fix issue with device information handling.
+	Fix issue with device disconnect handling.
+	Fix issue with duplicate connect handling.
+	Fix issue with attribute claiming for drivers.
+
+ver 5.35:
+	Fix issue with connected devices after discovery.
+	Fix issue with profile support and LTK loading.
+	Fix issue with AVRCP events for volume control.
+	Fix issue with OBEX session owner handling.
+	Fix issue with HID over GATT setup failures.
+	Fix issue with GATT notification registration.
+	Fix issue with GATT cache validation feature.
+	Add support for persistent GATT database.
+	Add support for controller enabling option.
+
+ver 5.34:
+	Fix issue with GATT profiles and auto-connect.
+	Fix issue with missing GoepL2CapPsm SDP data.
+	Fix issue with suspending AVDTP endpoints.
+	Fix issue with audio service state on disconnect.
+	Add support for AVRCP Set Addressed Player feature.
+	Add support for AVRCP Get Folder Items feature.
+	Add support for Android 5.1 HFP WBS callbacks.
+
+ver 5.33:
+	Fix issue with memory leak in GATT database.
+	Fix issue with AVDTP set configuration handling.
+	Fix issue with AVDTP discover procedure.
+	Fix issue with not emitting Paired property.
+
+ver 5.32:
+	Fix issue with OPP GET request path handling.
+	Fix issue with ATT information request errors.
+	Fix issue with advertising instance numbers.
+	Fix issue with overwriting SDP record cache.
+	Fix issue with new connections during disconnect.
+	Add support for GATT security auto-elevation.
+
+ver 5.31:
+	Fix issue with crash in networking interface.
+	Fix issue with crash when creating endless GATT loops.
+	Fix issue with memory leak when connecting services.
+	Fix issue with memory leak creating new D-Bus proxy.
+	Fix issue with profile connections from remote devices.
+	Fix issue with GATT over BR/EDR and MTU notification.
+	Fix issue with HID and dual mode remote devices.
+	Fix issue with handling A2DP vendor codec setup.
+	Fix issue with AVRCP and syncing player state.
+	Fix issue with GATT secondary discovery handling.
+	Fix issue with wrong characteristic allocation.
+	Add support for handling BNEP setup response.
+	Add support for setting GATT database security flags.
+	Add support for setting discovery filters interface.
+	Add support for user controlled advertising interface.
+	Update Android qualification documentation to PTS 6.1 release.
+
+ver 5.30:
+	Fix compilation error in C++ due to inline function.
+	Fix issue with missing storage of device information.
+	Fix issue with GATT client and gaps in service handles.
+	Fix issue with AVDTP discovery callback crashing.
+	Fix issue with AVCTP channel handling in case of conflicts.
+	Fix issue with AVRCP target and get capabilities command.
+	Add experimental support for LE advertising manager API.
+	Add support for Android 5.1 GATT MTU exchange API.
+
+ver 5.29:
+	Fix issue with AVCTP initial key repeat timeout.
+	Fix issue with Android application disconnect handling.
+	Fix issue with Android support and service notifications.
+	Fix issue with Android support and Exchange MTU Request.
+	Fix issue with Android HFP support and AT+CMER handling.
+	Fix issue with Android HFP support and SLC setup.
+	Fix issue with Android HFP support and call hold status.
+	Fix issue with Android HFP support and indicator handling.
+	Fix issue with Android HFP support and SCO/eSCO disconnection.
+	Fix issue with Android HID over GATT support and battery service.
+	Fix issue with GATT sending Exchange MTU Request for BR/EDR.
+	Fix issue with GATT notification support without CCC.
+	Fix issue with GATT object life-time after disconnects.
+	Fix issue with GATT notification handling API.
+	Add experimental support for GATT client D-Bus API.
+	Add experimental support for GATT server D-Bus API.
+	Add support for Multi Profile Specification.
+	Update Android qualification documentation to PTS 6.0 release.
+
+ver 5.28:
+	Fix issue with GATT device discovery and probing.
+	Fix issue with bearer selection for dual-mode devices.
+	Fix issue with device removal while connected.
+	Fix issue with device name setting from inquiry response.
+	Fix issue with missing termination of name characteristic.
+	Fix issue with UTF-8 length handling for device name.
+	Fix issue with AVCTP key auto release handling.
+	Fix issue with AVCTP key press repetition handling.
+	Fix issue with payload sizes and GATT notifications.
+	Fix issue with memory corruption and GATT notifications.
+	Add support for HID proxy switching and CSR 8510 A10 devices.
+	Add support for Broadcom hex2hcd conversion utility.
+
+ver 5.27:
+	Fix issue with endian handling and management interface.
+	Fix issue with pending GATT operations when disconnecting.
+	Fix issue with 128-bit UUID conversions for HID over GATT.
+	Add support for Android 5.0 SELinux policies.
+
+ver 5.26:
+	Fix issue with handling A2DP XCASE connection state.
+	Fix issue with crash and A2DP configuration failures.
+	Fix issue with crash during OBEX session shutdown.
+	Add support for version 1.2 of Phonebook Access Profile.
+	Add support for HID over GATT get and set report handling.
+	Add support for Low Energy Secure Connections feature.
+	Add support for Bluetooth 4.2 commands and events.
+	Add support for Android 5.0 Bluetooth features.
+
+ver 5.25:
+	Fix issue with SCO connection after codec negotiation.
+	Fix issue with GATT and secondary service discovery.
+	Fix issue with GATT write descriptor callback.
+	Fix issue with MAP supported features bits.
+	Add support for MAP local time and timezone offset.
+	Add support for PBAP speed-dial and favorites folders.
+	Add support for PBAP speed-dial and identifier filters.
+	Add support for controller mode configuration option.
+	Add initial support for Android Lollipop features.
+
+ver 5.24:
+	Fix issue with storing of connection parameters.
+	Add support for Phonebook Access Profile 1.2 features.
+	Add support for Message Access Profile 1.2 event reports.
+	Add support for Android Bluetooth configuration options.
+
 ver 5.23:
 	Fix issue with concurrent authorization requests.
 	Fix issue with HID report identifier mismatch.
