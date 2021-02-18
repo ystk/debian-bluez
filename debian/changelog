@@ -1,3 +1,11 @@
+bluez (5.43-2+deb9u2~deb8u2) jessie-security; urgency=high
+
+  * Non-maintainer upload by the ELTS team.
+  * CVE-2020-27153: Prevent a double-free vulnerability during service
+    discovery.
+
+ -- Chris Lamb <lamby@debian.org>  Sat, 24 Oct 2020 10:54:20 +0100
+
 bluez (5.43-2+deb9u2~deb8u1) jessie-security; urgency=high
 
   * Non-maintainer upload by the LTS Team.
