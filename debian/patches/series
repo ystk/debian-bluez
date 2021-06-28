@@ -15,3 +15,5 @@ HID-accepts-bonded-device-connections-only.patch
 input-hog-Attempt-to-set-security-level-if-not-bonde.patch
 input-Add-LEAutoSecurity-setting-to-input.conf.patch
 CVE-2020-27153.patch
+
+CVE-2020-26558+2021-0129.patch

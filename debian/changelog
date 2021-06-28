@@ -1,3 +1,14 @@
+bluez (5.43-2+deb9u2~deb8u3) jessie-security; urgency=high
+
+  * Non-maintainer upload by the ELTS team.
+  * updated kernel package needed as well!
+  * CVE-2020-26558 
+    avoid man-in-the-middle attack during secure pairing
+  * CVE-2021-0129
+    avoid information disclosure due to improper access control 
+
+ -- Thorsten Alteholz <debian@alteholz.de>  Tue, 22 Jun 2021 18:03:02 +0200
+
 bluez (5.43-2+deb9u2~deb8u2) jessie-security; urgency=high
 
   * Non-maintainer upload by the ELTS team.
