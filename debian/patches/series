@@ -17,3 +17,8 @@ input-Add-LEAutoSecurity-setting-to-input.conf.patch
 CVE-2020-27153.patch
 
 CVE-2020-26558+2021-0129.patch
+
+CVE-2019-8921.patch
+CVE-2019-8922.patch
+CVE-2021-41229.patch
+

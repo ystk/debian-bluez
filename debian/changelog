@@ -1,3 +1,26 @@
+bluez (5.43-2+deb9u2~deb8u4) jessie-security; urgency=high
+
+  * Non-maintainer upload by the ELTS Security Team.
+  * CVE-2017-1000250: replace RedHat's early patch with upstream's, so as
+    to minimize conflicts with new CVE fixes
+  * CVE-2019-8921: SDP infoleak, the vulnerability lies in the handling of
+    a SVC_ATTR_REQ by the SDP implementation of BlueZ. By crafting a
+    malicious CSTATE, it is possible to trick the server into returning
+    more bytes than the buffer actually holds, resulting in leaking
+    arbitrary heap data.
+  * CVE-2019-8922: SDP Heap Overflow; this vulnerability lies in the SDP
+    protocol handling of attribute requests as well. By requesting a huge
+    number of attributes at the same time, an attacker can overflow the
+    static buffer provided to hold the response.
+  * CVE-2021-41229: sdp_cstate_alloc_buf allocates memory which will
+    always be hung in the singly linked list of cstates and will not be
+    freed. This will cause a memory leak over time. The data can be a very
+    large object, which can be caused by an attacker continuously sending
+    sdp packets and this may cause the service of the target device to
+    crash.
+
+ -- Sylvain Beucler <beuc@debian.org>  Fri, 26 Nov 2021 20:05:30 +0100
+
 bluez (5.43-2+deb9u2~deb8u3) jessie-security; urgency=high
 
   * Non-maintainer upload by the ELTS team.
